@@ -1,2712 +1,2785 @@
-<?php
-require_once 'includes/config.php';
-require_once 'includes/functions.php';
-
-// ─── endpoint استعلام AJAX ───────────────────────────────
-if (isset($_GET['ajax_verify'])) {
-    header('Content-Type: application/json; charset=utf-8');
-    
-    if (!isset($pdo) || $pdo === null) {
-        require_once 'includes/db.php';
-    }
-    
-    $code = trim($_GET['ajax_verify']);
-    
-    if (!preg_match('/^\d{6}$/', $code)) {
-        echo json_encode(['valid' => false, 'reason' => 'format']);
-        exit;
-    }
-    
-    try {
-        $stmt = $pdo->prepare(
-            "SELECT c.cert_code, c.barcode, c.status, c.issued_at, c.expires_at,
-                    p.title AS product_title
-             FROM certificates c
-             LEFT JOIN products p ON p.id = c.product_id
-             WHERE c.barcode = ?
-               AND c.status = 'active'
-             LIMIT 1"
-        );
-        $stmt->execute([$code]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($row) {
-            echo json_encode([
-                'valid'        => true,
-                'cert_number'  => $row['cert_code'],
-                'barcode'      => $row['barcode'],
-                'product_title' => $row['product_title'] ?? '',
-                'issued_at'    => $row['issued_at'],
-                'expires_at'   => $row['expires_at']
-            ]);
-        } else {
-            $stmt2 = $pdo->prepare(
-                "SELECT status FROM certificates WHERE barcode = ? LIMIT 1"
-            );
-            $stmt2->execute([$code]);
-            $row2 = $stmt2->fetch(PDO::FETCH_ASSOC);
-            
-            if ($row2) {
-                echo json_encode(['valid' => false, 'reason' => $row2['status']]);
-            } else {
-                echo json_encode(['valid' => false, 'reason' => 'not_found']);
-            }
-        }
-    } catch (Exception $e) {
-        echo json_encode(['valid' => false, 'reason' => 'db_error', 'msg' => $e->getMessage()]);
-    }
-    exit;
-}
-
-if (isset($_GET['code'])) {
-    header('Location: result.php?code=' . urlencode($_GET['code']));
-    exit;
-}
-?>
-
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa" dir="rtl" data-theme="dark" data-preset="default" data-color="cyan">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>جواهری مشاهیر | اصالت و اعتبار</title>
-    <style>
-        :root {
-            --gold: #d4af37;
-            --gold-light: #f3e5ab;
-            --silver-metal: linear-gradient(135deg, #e0eaf5 0%, #b8c6db 50%, #8795a8 100%);
-            --gold-metal: linear-gradient(135deg, #ffeb9b 0%, #d4af37 50%, #aa8000 100%);
-            --bg-velvet-1: #030303;
-            --bg-velvet-2: #08080a;
-            --bg-velvet-3: #0a0505;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e17">
+<title>⛵ کشتی نوح v1.4.4 — گروه هنری اقاقیا</title>
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
+<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg1:#070b14; --bg2:#14081f; --bg3:#061a24;
+  --surface:rgba(255,255,255,0.09); --surface2:rgba(255,255,255,0.14); --surface3:rgba(255,255,255,0.20);
+  --glass-solid:rgba(15,22,35,0.88);
+  --border:rgba(255,255,255,0.14); --border2:rgba(255,255,255,0.24);
+  --text:#e9f0f8; --text2:#93a4bb; --text3:#5a6b7f;
+  --accent:#22d3ee; --accent2:#a855f7; --accent3:#f472b6;
+  --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  --shadow:0 12px 40px rgba(0,0,0,0.45); --shadow-sm:0 4px 16px rgba(0,0,0,0.28);
+  --radius:18px; --radius-sm:12px; --blur:24px;
+  --spring:cubic-bezier(.34,1.56,.64,1);
+  --stripe:rgba(255,255,255,0.025);
+  --card-elev: 0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.10);
+}
+[data-theme="light"]{
+  --bg1:#e8eef6; --bg2:#eee6f8; --bg3:#e0eef6;
+  --surface:rgba(255,255,255,0.72); --surface2:rgba(255,255,255,0.90);
+  --surface3:rgba(255,255,255,0.98); --glass-solid:rgba(248,250,254,0.92);
+  --border:rgba(30,50,90,0.14); --border2:rgba(30,50,90,0.28);
+  --text:#1a2332; --text2:#556780; --text3:#8090a5;
+  --shadow:0 12px 40px rgba(50,80,120,0.12); --shadow-sm:0 4px 16px rgba(50,80,120,0.08);
+  --stripe:rgba(30,50,90,0.025);
+  --card-elev: 0 8px 32px rgba(50,80,120,0.10), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+[data-color="blue"]{--accent:#3b82f6;--accent2:#6366f1;--accent3:#8b5cf6}
+[data-color="purple"]{--accent:#a855f7;--accent2:#d946ef;--accent3:#ec4899}
+[data-color="green"]{--accent:#10b981;--accent2:#22c55e;--accent3:#84cc16}
+[data-color="orange"]{--accent:#f97316;--accent2:#f59e0b;--accent3:#ef4444}
+[data-color="pink"]{--accent:#ec4899;--accent2:#f472b6;--accent3:#fbbf24}
+[data-color="red"]{--accent:#ef4444;--accent2:#dc2626;--accent3:#f97316}
+[data-color="teal"]{--accent:#14b8a6;--accent2:#0d9488;--accent3:#06b6d4}
+[data-color="amber"]{--accent:#f59e0b;--accent2:#d97706;--accent3:#eab308}
+[data-color="dracula"]{--accent:#bd93f9;--accent2:#ff79c6;--accent3:#50fa7b}
+[data-color="monokai"]{--accent:#a6e22e;--accent2:#f92672;--accent3:#66d9ef}
+[data-color="nord"]{--accent:#88c0d0;--accent2:#81a1c1;--accent3:#5e81ac}
+[data-color="tokyo"]{--accent:#7aa2f7;--accent2:#bb9af7;--accent3:#7dcfff}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+/* DISTINCT PRESETS */
+[data-preset="default"]{--radius:18px;--radius-sm:12px;--blur:24px}
+[data-preset="material"]{
+  --radius:4px; --radius-sm:2px; --blur:0px;
+  --surface:rgba(255,255,255,0.10); --surface2:rgba(255,255,255,0.16); --surface3:rgba(255,255,255,0.22);
+  --border:rgba(255,255,255,0.08); --border2:rgba(255,255,255,0.16);
+  --shadow:0 2px 4px rgba(0,0,0,0.2),0 4px 8px rgba(0,0,0,0.15),0 8px 16px rgba(0,0,0,0.12);
+  --glass-solid:rgba(20,26,38,0.98);
+}
+[data-theme="light"][data-preset="material"]{
+  --surface:rgba(255,255,255,0.98); --surface2:rgba(245,248,252,0.98); --surface3:#fff;
+  --border:rgba(30,50,90,0.12); --border2:rgba(30,50,90,0.24);
+  --glass-solid:rgba(255,255,255,0.99);
+  --shadow:0 1px 3px rgba(50,80,120,0.15),0 4px 8px rgba(50,80,120,0.10),0 8px 16px rgba(50,80,120,0.08);
+}
+[data-preset="liquid"]{
+  --radius:32px; --radius-sm:20px; --blur:52px;
+  --surface:rgba(255,255,255,0.14); --surface2:rgba(255,255,255,0.20); --surface3:rgba(255,255,255,0.28);
+  --border:rgba(255,255,255,0.26); --border2:rgba(255,255,255,0.40);
+  --shadow:0 16px 56px rgba(0,0,0,0.55),inset 0 2px 0 rgba(255,255,255,0.20);
+  --glass-solid:rgba(15,22,35,0.72);
+}
+[data-theme="light"][data-preset="liquid"]{
+  --surface:rgba(255,255,255,0.60); --surface2:rgba(255,255,255,0.85); --surface3:rgba(255,255,255,0.96);
+  --glass-solid:rgba(248,250,254,0.75);
+}
+[data-preset="win11"]{
+  --radius:8px; --radius-sm:6px; --blur:32px;
+  --surface:rgba(40,45,55,0.70); --surface2:rgba(48,52,62,0.85); --surface3:rgba(56,60,70,0.95);
+  --border:rgba(255,255,255,0.09); --border2:rgba(255,255,255,0.14);
+  --shadow:0 4px 20px rgba(0,0,0,0.35),inset 0 1px 0 rgba(255,255,255,0.06);
+  --glass-solid:rgba(32,36,44,0.85);
+}
+[data-theme="light"][data-preset="win11"]{
+  --surface:rgba(252,252,254,0.80); --surface2:rgba(248,248,252,0.92); --surface3:#fff;
+  --border:rgba(30,50,90,0.10); --border2:rgba(30,50,90,0.18);
+  --glass-solid:rgba(252,252,254,0.88);
+}
 
-        @keyframes gradientMove {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
+html,body{min-height:100vh;font-family:'Vazirmatn','Segoe UI',Tahoma,sans-serif;color:var(--text);background:var(--bg1);transition:background .4s,color .4s;line-height:1.55;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:-20%;z-index:-2;background:radial-gradient(ellipse at 20% 10%,var(--bg2) 0%,transparent 55%),radial-gradient(ellipse at 80% 90%,var(--bg3) 0%,transparent 55%),var(--bg1);animation:drift 28s ease-in-out infinite alternate}
+@keyframes drift{to{transform:translate(-2%,2%) scale(1.05)}}
+.glass{background:var(--surface);backdrop-filter:blur(var(--blur)) saturate(180%);-webkit-backdrop-filter:blur(var(--blur)) saturate(180%);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--card-elev)}
 
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background: linear-gradient(-45deg, var(--bg-velvet-1), var(--bg-velvet-2), var(--bg-velvet-3), #000000);
-            background-size: 400% 400%;
-            animation: gradientMove 25s ease infinite;
-            color: #e0e0e0;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            overflow-x: hidden;
-            position: relative;
-        }
+/* SPLASH */
+.splash{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;overflow:hidden;background:linear-gradient(180deg,#02050f 0%,#070b14 40%,#0d0f2a 70%,#1a0f2e 100%);transition:opacity .6s ease,visibility .6s ease}
+.splash.hide{opacity:0;visibility:hidden;pointer-events:none}
+.splash-stars{position:absolute;inset:0}
+.splash-star{position:absolute;border-radius:50%;background:#fff;box-shadow:0 0 3px rgba(255,255,255,0.9);animation:twinkle 3s ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:.35;transform:scale(.7)}50%{opacity:1;transform:scale(1.15)}}
+.splash-moon{position:absolute;top:12%;right:14%;width:72px;height:72px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#f5f7fb,#d0d8e6 50%,#98a3b8 100%);box-shadow:0 0 60px rgba(200,220,255,0.55),inset -8px -8px 22px rgba(90,110,145,0.35);overflow:hidden}
+.splash-moon::before,.splash-moon::after{content:'';position:absolute;border-radius:50%;background:rgba(130,145,175,0.35);box-shadow:inset 1px 1px 3px rgba(70,85,115,0.4)}
+.splash-moon::before{width:16px;height:16px;top:26%;left:24%}
+.splash-moon::after{width:10px;height:10px;top:56%;left:56%;box-shadow:inset 1px 1px 2px rgba(70,85,115,0.4),18px -22px 0 3px rgba(130,145,175,0.28),-12px 10px 0 1px rgba(130,145,175,0.32)}
+.splash-waves{position:absolute;bottom:0;left:0;right:0;height:38%;overflow:hidden}
+.splash-wave{position:absolute;bottom:0;left:-50%;width:200%;height:100%;background:radial-gradient(ellipse at 50% 100%,rgba(34,211,238,0.15),transparent 70%)}
+.splash-wave:nth-child(1){animation:wave 9s linear infinite;opacity:.6}
+.splash-wave:nth-child(2){animation:wave 13s linear infinite reverse;opacity:.45;background:radial-gradient(ellipse at 50% 100%,rgba(168,85,247,0.15),transparent 70%)}
+@keyframes wave{0%{transform:translateX(0)}50%{transform:translateX(-25%) translateY(-8px)}100%{transform:translateX(-50%)}}
+.splash-inner{position:relative;z-index:2;text-align:center;padding:20px;animation:splashIn 1s var(--spring)}
+@keyframes splashIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
+.splash .logo-wrap{display:inline-block;margin-bottom:14px;animation:shipBob 3s ease-in-out infinite;filter:drop-shadow(0 0 24px rgba(34,211,238,0.6))}
+.splash .logo-wrap svg{width:96px;height:96px;display:block}
+@keyframes shipBob{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-10px) rotate(3deg)}}
+.splash h1{font-size:34px;font-weight:900;background:linear-gradient(135deg,#22d3ee,#a855f7,#f472b6);-webkit-background-clip:text;background-clip:text;color:transparent}
+.splash .msg{font-size:13px;color:#93a4bb;margin-top:14px;min-height:20px}
+.splash .ver{font-size:10px;color:#5a6b7f;margin-top:26px}
+.splash .bar{width:180px;height:4px;background:rgba(255,255,255,0.08);border-radius:3px;margin:22px auto 0;overflow:hidden}
+.splash .bar::after{content:'';display:block;height:100%;width:40%;background:linear-gradient(90deg,#22d3ee,#a855f7,#f472b6);border-radius:3px;animation:loadBar 1.6s ease-in-out infinite}
+@keyframes loadBar{0%{margin-left:-40%;width:30%}50%{margin-left:20%;width:50%}100%{margin-left:100%;width:30%}}
 
-        #stars-canvas {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none;
-        }
+/* TOPBAR */
+.topbar{position:sticky;top:10px;z-index:50;margin:10px auto;max-width:1180px;width:calc(100% - 20px);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--glass-solid);backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);border-radius:18px;border:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:9px;flex-shrink:0;order:1}
+.topbar-actions{display:flex;gap:6px;order:3;flex-shrink:0}
+.tabs{display:none;gap:4px;flex:1;justify-content:center;order:2}
+@media(min-width:721px){.tabs{display:flex}}
+.brand-icon{width:34px;height:34px;display:grid;place-items:center;flex-shrink:0}
+.brand-icon svg{width:100%;height:100%;filter:drop-shadow(0 2px 6px rgba(34,211,238,0.45))}
+.brand h1{font-size:15px;font-weight:800;background:linear-gradient(90deg,var(--accent),var(--accent2),var(--accent3));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1.1}
+.brand .sub{font-size:9.5px;color:var(--text2);margin-top:1px;text-align:right}
+.tab{background:transparent;border:1px solid transparent;color:var(--text2);padding:7px 13px;border-radius:11px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .25s var(--spring);white-space:nowrap}
+.tab:hover{background:var(--surface2);color:var(--text)}
+.tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 4px 18px rgba(34,211,238,0.32)}
+.icon-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);width:38px;height:38px;border-radius:11px;cursor:pointer;font-size:17px;display:grid;place-items:center;transition:all .25s var(--spring);flex-shrink:0}
+.icon-btn:hover{background:var(--surface3);transform:scale(1.06)}
+.icon-btn:active{transform:scale(.94)}
+main{max-width:1180px;margin:0 auto;padding:0 10px 130px}
+@media(min-width:721px){main{padding-bottom:40px}}
+.page{display:none;animation:pageIn .35s ease}
+.page.active{display:block}
+@keyframes pageIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.card{padding:16px;margin-bottom:12px}
+@media(max-width:720px){.card{padding:12px;margin-bottom:10px}}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.field label{font-size:11.5px;color:var(--text2);font-weight:600;padding:0 2px;display:flex;align-items:center;gap:5px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:720px){.row{grid-template-columns:1fr}}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media(max-width:900px){.row3{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.row3{grid-template-columns:1fr}}
 
-        .main-wrapper {
-            display: flex; flex-direction: column; width: 100%; max-width: 1000px;
-            position: relative; z-index: 2; padding: 15px; gap: 20px;
-        }
+/* Subtabs */
+.subtabs{display:flex;gap:4px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px}
+.subtab{padding:7px 13px;border-radius:9px;background:var(--surface);border:1px solid var(--border);color:var(--text2);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .25s;flex-shrink:0}
+.subtab:hover{background:var(--surface2);color:var(--text)}
+.subtab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent}
+.subpage{display:none}
+.subpage.active{display:block;animation:pageIn .25s ease}
 
-        @media (min-width: 768px) {
-            .main-wrapper { align-items: center; justify-content: space-between; padding: 40px; }
-        }
+/* DROPDOWN */
+.dd{position:relative;width:100%}
+.dd-trigger{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:var(--radius-sm);font-family:inherit;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;transition:all .25s;min-height:42px;text-align:right}
+.dd-trigger:hover{background:var(--surface2);border-color:var(--border2)}
+.dd-trigger.open{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,0.15)}
+.dd-trigger .placeholder{color:var(--text3);font-weight:400}
+.dd-trigger .selected{display:flex;align-items:center;gap:6px;flex:1;min-width:0;overflow:hidden}
+.dd-trigger .selected .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.dd-trigger .chev{font-size:14px;color:var(--text2);transition:transform .3s var(--spring);flex-shrink:0}
+.dd-trigger.open .chev{transform:rotate(180deg)}
+.dd-panel{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:250;background:var(--glass-solid);backdrop-filter:blur(32px) saturate(200%);-webkit-backdrop-filter:blur(32px) saturate(200%);border:1px solid var(--border2);border-radius:var(--radius-sm);box-shadow:var(--shadow);max-height:280px;overflow-y:auto;padding:6px;opacity:0;visibility:hidden;transform:translateY(-6px) scale(.98);transition:all .25s var(--spring);transform-origin:top center}
+.dd.open .dd-panel{opacity:1;visibility:visible;transform:none}
+.dd-item{padding:9px 10px;border-radius:9px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:12.5px;transition:background .15s;white-space:nowrap;overflow:hidden;line-height:1.2}
+.dd-item:hover{background:var(--surface2)}
+.dd-item.active{background:rgba(34,211,238,0.18)}
+.dd-item .num{width:20px;height:20px;border-radius:6px;background:var(--surface2);display:grid;place-items:center;font-size:10.5px;font-weight:700;color:var(--text2);flex-shrink:0}
+.dd-item.active .num{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.dd-item .ttl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.dd-item .dt{font-size:10.5px;color:var(--text3);flex-shrink:0;font-variant-numeric:tabular-nums}
+.dd-item .bg{font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;flex-shrink:0;background:rgba(168,85,247,0.20);color:#c084fc;border:1px solid rgba(168,85,247,0.3)}
+.dd-item .bg.new{background:rgba(52,211,153,0.18);color:#34d399;border-color:rgba(52,211,153,0.3)}
+.dd-item.empty{color:var(--text3);justify-content:center;cursor:default;padding:14px}
+.dd-item.empty:hover{background:transparent}
 
-        .visual-section {
-            position: relative; display: flex; justify-content: center; align-items: center;
-            width: 100%; min-height: 370px; touch-action: pan-y;
-        }
+/* Dropdown Backdrop */
+.dd-backdrop{position:fixed;inset:0;z-index:150;background:rgba(5,10,20,0.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:0;visibility:hidden;transition:all .25s;pointer-events:none}
+.dd-backdrop.show{opacity:1;visibility:visible;pointer-events:auto}
+[data-theme="light"] .dd-backdrop{background:rgba(200,210,230,0.30)}
 
-        #coin-3d-container {
-            width: 380px; height: 380px; cursor: grab; z-index: 5;
-            transition: transform 0.3s ease;
-        }
-        #coin-3d-container:active { cursor: grabbing; }
+/* Code Box */
+.code-wrap{position:relative;margin-bottom:10px}
+.code-toolbar{position:absolute;top:8px;left:8px;z-index:5;display:flex;gap:4px;background:var(--glass-solid);backdrop-filter:blur(28px) saturate(200%);-webkit-backdrop-filter:blur(28px) saturate(200%);border:1px solid var(--border2);border-radius:12px;padding:4px;box-shadow:var(--shadow-sm)}
+.code-toolbar button{background:transparent;border:none;color:var(--text);height:32px;min-width:32px;border-radius:8px;cursor:pointer;font-size:15px;display:grid;place-items:center;transition:all .2s;padding:0 6px}
+.code-toolbar button:hover{background:var(--surface2);transform:scale(1.06)}
+.code-toolbar button:active{transform:scale(.94)}
+.code-toolbar .toolbar-save{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;padding:0 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;min-width:88px;box-shadow:0 4px 14px rgba(34,211,238,0.4);border-radius:9px}
+.code-toolbar .toolbar-save:hover{transform:scale(1.04);box-shadow:0 6px 20px rgba(34,211,238,0.55)}
+textarea.code-input{width:100%;min-height:260px;padding:52px 14px 14px;resize:vertical;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);font-family:'JetBrains Mono',Consolas,monospace;font-size:12.5px;line-height:1.6;outline:none;transition:all .25s;direction:ltr;text-align:left}
+textarea.code-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,0.15);background:var(--surface2)}
+[data-tip]{position:relative}
+[data-tip]::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(4px);background:rgba(10,15,25,0.95);color:#fff;padding:6px 11px;border-radius:8px;font-size:11px;font-weight:600;white-space:nowrap;z-index:1000;pointer-events:none;opacity:0;transition:all .2s ease;border:1px solid rgba(255,255,255,0.1)}
+[data-theme="light"] [data-tip]::after{background:rgba(20,30,45,0.94)}
+[data-tip]:hover::after{opacity:1;transform:translateX(-50%) translateY(0)}
+.icon-action{background:var(--surface2);border:1px solid var(--border);color:var(--text);height:44px;min-width:44px;padding:0 14px;border-radius:11px;font-family:inherit;font-size:18px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:all .25s var(--spring);flex-shrink:0}
+.icon-action:hover{background:var(--surface3);border-color:var(--border2);transform:translateY(-1px)}
+.icon-action:active{transform:scale(.96)}
+.icon-action.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#fff;box-shadow:0 6px 20px rgba(34,211,238,0.35)}
+.icon-action.danger{background:rgba(248,113,113,0.14);border-color:rgba(248,113,113,0.4);color:#f87171}
+.icon-action.success{background:rgba(52,211,153,0.14);border-color:rgba(52,211,153,0.4);color:#34d399}
+.icon-action .lbl{font-size:12px;font-weight:600}
+.bottom-row{display:flex;align-items:stretch;gap:8px;margin-top:10px;flex-wrap:nowrap}
+.bottom-row .date-box{flex:1;min-width:0;background:var(--surface);border:1px dashed var(--border);border-radius:11px;padding:0 14px;display:flex;align-items:center;font-size:12.5px;color:var(--text2);font-variant-numeric:tabular-nums;height:44px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+.bottom-row .date-box .ph{font-size:15px;margin-left:6px;color:var(--accent);flex-shrink:0}
+.mini-table{width:100%;border-collapse:collapse;table-layout:fixed;border-radius:11px;overflow:hidden;font-size:12.5px;background:var(--surface)}
+.mini-table tr{border-bottom:1px solid var(--border)}
+.mini-table tr:last-child{border-bottom:none}
+.mini-table tr:nth-child(odd){background:var(--stripe)}
+.mini-table th{text-align:right;padding:10px 12px;color:var(--text2);font-weight:600;font-size:11.5px;width:110px;vertical-align:top;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-table td{padding:10px 12px;vertical-align:top;font-size:12.5px;max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;transition:background .15s}
+.mini-table td:hover{background:rgba(34,211,238,0.06)}
+.mini-table tr.expanded td{white-space:normal;overflow:visible;max-width:none;word-break:break-word}
+.mini-table tr.expanded{background:rgba(34,211,238,0.04)}
+.mini-table td .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10.5px;font-weight:700;margin:1px 0 1px 4px;background:rgba(34,211,238,0.15);color:#22d3ee;border:1px solid rgba(34,211,238,0.28)}
 
-        #flip-btn {
-            position: absolute;
-            bottom: 10px;
-            right: calc(50% - 190px);
-            z-index: 10;
-            background: linear-gradient(135deg, #1a1a1a, #0d0d0d);
-            border: 1px solid #333;
-            border-radius: 20px;
-            color: var(--gold);
-            font-size: 12px;
-            padding: 7px 16px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.7), 0 0 0 1px rgba(212,175,55,0.1);
-            transition: all 0.25s ease;
-            user-select: none;
-        }
-        #flip-btn:hover {
-            border-color: var(--gold);
-            box-shadow: 0 4px 16px rgba(212,175,55,0.25);
-        }
-        #flip-btn:active {
-            transform: scale(0.95);
-        }
-        #flip-btn .flip-icon {
-            font-size: 15px;
-            display: inline-block;
-            transition: transform 0.5s ease;
-        }
-        #flip-btn.flipping .flip-icon {
-            transform: rotate(45deg);
-        }
-        #flip-side-label {
-            position: absolute;
-            top: 10px;
-            right: calc(50% - 190px);
-            z-index: 10;
-            background: rgba(0,0,0,0.55);
-            backdrop-filter: blur(6px);
-            border: 1px solid #2a2a2a;
-            border-radius: 12px;
-            color: #888;
-            font-size: 11px;
-            padding: 4px 12px;
-            pointer-events: none;
-            transition: all 0.3s;
-        }
+/* ITEM CAROUSEL */
+.item-carousel{display:flex;gap:8px;overflow-x:auto;padding:6px 4px 12px;scroll-snap-type:x mandatory;scrollbar-width:thin;scroll-behavior:smooth}
+.item-carousel::-webkit-scrollbar{height:5px}
+.item-carousel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+.carousel-item{flex:0 0 auto;width:88px;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;cursor:pointer;scroll-snap-align:start;transition:all .25s var(--spring);font-family:inherit;color:var(--text)}
+.carousel-item:hover{transform:translateY(-2px);background:var(--surface2);border-color:var(--border2)}
+.carousel-item.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent;box-shadow:0 6px 20px rgba(34,211,238,0.35)}
+.ci-icon{width:48px;height:48px;display:grid;place-items:center;font-size:30px;border-radius:12px;background:var(--surface2);overflow:hidden;flex-shrink:0}
+.carousel-item.active .ci-icon{background:rgba(255,255,255,0.22)}
+.ci-icon img{width:100%;height:100%;object-fit:cover}
+.ci-label{font-size:10.5px;font-weight:600;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
+.ci-badge{font-size:8.5px;padding:1px 6px;border-radius:5px;font-weight:700;background:rgba(168,85,247,0.20);color:#c084fc;margin-top:1px}
+.carousel-item.active .ci-badge{background:rgba(255,255,255,0.25);color:#fff}
+.version-switcher{display:flex;align-items:center;justify-content:center;gap:10px;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-top:10px}
+.ver-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:18px;display:grid;place-items:center;transition:all .2s var(--spring);flex-shrink:0}
+.ver-btn:hover{background:var(--surface3);transform:scale(1.08)}
+.ver-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.ver-display{flex:1;text-align:center;min-width:120px}
+.ver-num{font-size:16px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+.ver-of{font-size:11px;color:var(--text2);margin-right:4px}
+.ver-date{font-size:10px;color:var(--text3);margin-top:2px;font-variant-numeric:tabular-nums}
 
-        .content-section { width: 100%; display: flex; justify-content: center; z-index: 5; }
+/* FULL-WIDTH PREVIEW */
+.preview-full{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:10px;position:relative;width:100%}
+.preview-full iframe{display:block;width:100%;border:none;background:transparent;min-height:240px;height:auto}
+.preview-full .fw-label{position:absolute;top:10px;right:10px;z-index:2;background:var(--glass-solid);backdrop-filter:blur(20px);border:1px solid var(--border2);border-radius:8px;padding:3px 9px;font-size:10.5px;font-weight:700;color:var(--text2);display:flex;align-items:center;gap:4px;pointer-events:none}
 
-        .content-card {
-            background: rgba(10, 10, 12, 0.75); 
-            backdrop-filter: blur(20px);
-            border-radius: 20px; 
-            padding: 25px 20px; 
-            width: 100%; 
-            max-width: 450px;
-            text-align: center; 
-            position: relative;
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 0 15px 40px rgba(0,0,0,0.9);
-        }
+.dep-status{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:8px;font-size:11px;font-weight:600;border:1px solid;margin:3px 3px 3px 0}
+.dep-status.green{background:rgba(52,211,153,0.14);color:#34d399;border-color:rgba(52,211,153,0.35)}
+.dep-status.red{background:rgba(248,113,113,0.14);color:#f87171;border-color:rgba(248,113,113,0.35)}
+.dep-status.warn{background:rgba(251,191,36,0.14);color:#fbbf24;border-color:rgba(251,191,36,0.35)}
+.dep-status.checking{background:rgba(251,191,36,0.14);color:#fbbf24;border-color:rgba(251,191,36,0.35)}
+.dep-status .dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 6px currentColor}
+.dep-status.checking .dot{animation:pulseDot 1.2s ease-in-out infinite}
+@keyframes pulseDot{0%,100%{opacity:.4}50%{opacity:1}}
+.card-title{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px;color:var(--text)}
+.card-title .ph{font-size:16px;color:var(--accent)}
 
-        h1 {
-            font-size: 38px; background: var(--gold-metal);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            letter-spacing: 1px; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); margin-bottom: 5px;
-            cursor: pointer; user-select: none;
-        }
+/* TOAST */
+.toast{position:fixed;bottom:100px;left:50%;transform:translate(-50%,80px);z-index:500;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;padding:11px 20px;border-radius:12px;font-size:12.5px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,0.4);opacity:0;transition:.35s;pointer-events:none;max-width:90vw;text-align:center}
+@media(min-width:721px){.toast{bottom:24px}}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.err{background:linear-gradient(135deg,#f87171,#b91c1c)}
+.toast.ok{background:linear-gradient(135deg,#34d399,#059669)}
 
-        .subtitle { font-size: 14px; color: #888; margin-bottom: 20px; letter-spacing: 0.5px; }
+/* MODAL */
+.modal-backdrop{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.modal-backdrop.show{display:flex;animation:fadeIn .25s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;background:var(--glass-solid);backdrop-filter:blur(34px) saturate(200%);-webkit-backdrop-filter:blur(34px) saturate(200%);border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.5);animation:modalIn .3s var(--spring)}
+@keyframes modalIn{from{opacity:0;transform:scale(.94) translateY(10px)}to{opacity:1;transform:none}}
+.modal-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-head h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:7px}
+.modal-head h3 .ph{color:var(--accent);font-size:16px}
+.modal-body{padding:16px 18px;overflow-y:auto;flex:1}
+.modal-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.modal-body input[type=text],.modal-body textarea{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:11px;font-family:inherit;font-size:13px;outline:none}
+.modal-body textarea{min-height:180px;font-family:'JetBrains Mono',monospace;font-size:11.5px;direction:ltr;text-align:left;resize:vertical}
 
-        .verify-link {
-            display: inline-block; background: var(--silver-metal); color: #111;
-            padding: 12px 26px; border-radius: 20px; font-weight: 800; font-size: 15px;
-            cursor: pointer; margin-bottom: 18px; text-decoration: none;
-            box-shadow: 0 5px 12px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,255,255,0.7), inset 0 -3px 0 rgba(0,0,0,0.4);
-            transition: all 0.2s;
-        }
-        .verify-link:active { transform: translateY(2px) scale(0.98); }
+/* TABLES */
+.table-scroll{width:100%;overflow-x:auto;border-radius:11px;-webkit-overflow-scrolling:touch}
+.table-scroll::-webkit-scrollbar{height:6px}
+.table-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.data-table{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--surface);table-layout:fixed}
+.data-table th{text-align:right;padding:9px 11px;color:var(--text2);font-weight:600;font-size:11.5px;background:var(--stripe);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.data-table td{padding:9px 11px;word-wrap:break-word;font-size:12.5px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.data-table tr{border-bottom:1px solid var(--border)}
+.data-table tr:last-child{border-bottom:none}
+.app-info-table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.app-info-table tr{border-bottom:1px solid var(--border)}
+.app-info-table tr:last-child{border-bottom:none}
+.app-info-table th{text-align:right;padding:9px 4px;color:var(--text3);font-weight:500;font-size:11px;width:42%}
+.app-info-table td{text-align:left;padding:9px 4px;color:var(--text);font-weight:600;font-size:12px;direction:ltr;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-info-table td .ver-badge{display:inline-block;padding:2px 9px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:11px;font-weight:800;letter-spacing:.5px}
+.app-info-table td .days-badge{display:inline-block;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,0.15);color:#34d399;font-size:10.5px;font-weight:700;border:1px solid rgba(52,211,153,0.3);margin-left:6px}
 
-        .menu { display: flex; gap: 10px; justify-content: center; }
-        .menu-btn {
-            background: linear-gradient(135deg, rgba(40,40,40,0.9), rgba(20,20,20,0.9));
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(80,80,80,0.5); 
-            padding: 9px 20px; 
-            border-radius: 14px;
-            cursor: pointer; 
-            font-size: 13px; 
-            color: #aaa; 
-            transition: all 0.25s;
-            box-shadow: 0 3px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
-        }
-        .menu-btn:hover { 
-            border-color: var(--gold); 
-            color: var(--gold);
-            background: linear-gradient(135deg, rgba(50,50,50,0.95), rgba(25,25,25,0.95));
-        }
+/* TECH CAROUSEL */
+.tech-carousel-wrap{overflow:hidden;position:relative;margin:4px -4px;padding:6px 4px;mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.tech-carousel-track{display:flex;gap:10px;width:max-content;animation:techScroll 32s linear infinite}
+.tech-carousel-wrap:hover .tech-carousel-track{animation-play-state:paused}
+@keyframes techScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.tech-item{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;transition:all .3s var(--spring);min-width:180px}
+.tech-item:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(34,211,238,0.20);transform:translateY(-2px)}
+.ti-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;color:#fff;font-size:18px;flex-shrink:0;box-shadow:0 3px 10px rgba(34,211,238,0.30)}
+.ti-body{display:flex;flex-direction:column;gap:1px;min-width:0}
+.ti-name{font-size:11.5px;font-weight:800;color:var(--text);white-space:nowrap}
+.ti-desc{font-size:10px;color:var(--text2);white-space:nowrap}
 
-        .modal-overlay {
-            display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.88);
-            backdrop-filter: blur(12px); z-index: 1000; align-items: center; justify-content: center;
-            padding: 15px; perspective: 1000px;
-        }
-        .modal-container {
-            background: rgba(15, 15, 15, 0.97); 
-            border: 1px solid rgba(60,60,60,0.6); 
-            border-radius: 18px;
-            width: 100%; max-width: 450px; padding: 28px 24px; position: relative; opacity: 0;
-            transform: translateY(40px) scale(0.96); 
-            filter: blur(4px);
-            transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
-            box-shadow: 0 20px 45px rgba(0,0,0,0.9), inset 0 0 20px rgba(255,255,255,0.02);
-            backdrop-filter: blur(15px);
-        }
-        .modal-overlay.show .modal-container {
-            opacity: 1; transform: translateY(0) scale(1); filter: blur(0);
-        }
-        .close-modal { position: absolute; top: 14px; left: 14px; color: #666; font-size: 19px; cursor: pointer; transition: color 0.25s;}
-        .close-modal:hover { color: var(--gold); }
-        .modal-title { color: var(--gold); margin-bottom: 22px; font-size: 17px; text-align: center; }
+/* VERSION ACCORDION */
+.version-accordion{display:flex;flex-direction:column;gap:8px}
+.version-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:all .3s var(--spring)}
+.version-card.open{border-color:var(--accent);box-shadow:0 4px 20px rgba(34,211,238,0.18)}
+.version-header{width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;background:transparent;border:none;color:var(--text);cursor:pointer;font-family:inherit;text-align:right;transition:background .2s}
+.version-header:hover{background:var(--surface2)}
+.vh-badge{padding:3px 10px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:11px;font-weight:800;letter-spacing:.4px;flex-shrink:0}
+.vh-title{font-size:12.5px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vh-date{font-size:10.5px;color:var(--text3);flex-shrink:0;font-variant-numeric:tabular-nums}
+.vh-chev{font-size:14px;color:var(--text2);flex-shrink:0;transition:transform .35s var(--spring)}
+.version-card.open .vh-chev{transform:rotate(180deg);color:var(--accent)}
+.version-body{max-height:0;overflow:hidden;transition:max-height .45s cubic-bezier(.4,0,.2,1);background:rgba(0,0,0,0.10)}
+.version-card.open .version-body{max-height:1200px}
+.version-body-inner{padding:4px 14px 14px}
+.vbi-group{margin-top:10px}
+.vbi-group-title{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.vbi-group-title .ph{font-size:13px}
+.vbi-new{color:var(--ok)} .vbi-new .ph{color:var(--ok)}
+.vbi-upd{color:#3b82f6} .vbi-upd .ph{color:#3b82f6}
+.vbi-fix{color:var(--warn)} .vbi-fix .ph{color:var(--warn)}
+.vbi-list{list-style:none;padding:0;margin:0}
+.vbi-list li{position:relative;padding:4px 16px 4px 0;font-size:11.5px;color:var(--text2);line-height:1.7;border-bottom:1px dashed var(--border)}
+.vbi-list li:last-child{border-bottom:none}
+.vbi-list li::before{content:'•';position:absolute;right:4px;color:var(--accent);font-weight:900}
+[data-theme="light"] .version-body{background:rgba(0,0,0,0.02)}
 
-        .pin-container { 
-            display: flex; 
-            justify-content: center; 
-            gap: 10px; 
-            margin-bottom: 22px; 
-            direction: ltr;
-        }
+/* MOBILE NAV */
+.mobile-nav{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:90;background:var(--glass-solid);backdrop-filter:blur(28px) saturate(200%);-webkit-backdrop-filter:blur(28px) saturate(200%);border:1px solid var(--border2);border-radius:40px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.14);display:flex;align-items:center;gap:4px;max-width:calc(100vw - 32px)}
+@media(min-width:721px){.mobile-nav{display:none}}
+.nav-slider{position:absolute;top:6px;bottom:6px;border-radius:34px;background:linear-gradient(135deg,var(--accent),var(--accent2));transition:all 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);z-index:0;box-shadow:0 6px 20px rgba(34,211,238,0.42);pointer-events:none;opacity:0;left:6px;width:60px}
+.nav-slider.ready{opacity:1}
+.mobile-nav button{position:relative;z-index:1;background:transparent;border:none;color:var(--text2);cursor:pointer;border-radius:34px;padding:11px 14px;display:flex;align-items:center;justify-content:center;font-family:inherit;font-size:12px;font-weight:600;white-space:nowrap;transition:color .3s ease, padding .5s var(--spring)}
+.mobile-nav button .ph{font-size:19px;flex-shrink:0;transition:color .3s ease}
+.mobile-nav button .lbl{max-width:0;overflow:hidden;opacity:0;transition:max-width .55s var(--spring), opacity .35s ease .05s, margin .5s var(--spring);white-space:nowrap;font-weight:700}
+.mobile-nav button.active{color:#fff;padding-left:16px;padding-right:16px}
+.mobile-nav button.active .lbl{max-width:80px;opacity:1;margin-right:6px}
 
-        .pin-box {
-            width: 52px; 
-            height: 62px; 
-            border-radius: 12px; 
-            background: linear-gradient(180deg, #1a1a1a, #0a0a0a);
-            border: 2px solid #555;
-            color: transparent;
-            font-size: 28px; 
-            font-weight: bold; 
-            text-align: center;
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.8), 0 4px 8px rgba(0,0,0,0.5);
-            transition: all 0.25s ease; 
-            position: relative; 
-            overflow: hidden;
-            font-family: monospace;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+/* THEMES GRID */
+.theme-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+.theme-cell{padding:14px 10px;background:var(--surface);border:2px solid var(--border);border-radius:12px;cursor:pointer;text-align:center;font-family:inherit;color:var(--text);transition:all .3s var(--spring);position:relative;overflow:hidden}
+.theme-cell:hover{border-color:var(--border2);transform:translateY(-3px) scale(1.02);box-shadow:0 8px 24px rgba(0,0,0,0.2)}
+.theme-cell.active{border-color:var(--accent);background:var(--surface2);box-shadow:0 0 0 3px rgba(34,211,238,0.18),0 8px 24px rgba(0,0,0,0.3)}
+.theme-cell.active::after{content:'✓';position:absolute;top:6px;left:6px;width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:10px;display:grid;place-items:center;font-weight:900}
+.theme-cell .tc-icon{font-size:30px;margin-bottom:6px;display:block}
+.theme-cell .tc-name{font-size:11.5px;font-weight:700}
+.color-grid{display:flex;flex-wrap:wrap;gap:10px}
+.color-cell{width:44px;height:44px;border-radius:50%;border:3px solid transparent;cursor:pointer;transition:all .25s var(--spring);position:relative}
+.color-cell:hover{transform:scale(1.15) rotate(5deg)}
+.color-cell.active{border-color:#fff;box-shadow:0 0 0 2px var(--text);transform:scale(1.08)}
+.color-cell.active::after{content:'✓';position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:16px;font-weight:900;text-shadow:0 1px 3px rgba(0,0,0,0.5)}
 
-        .pin-box .digit-display {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-size: 28px;
-            font-weight: bold;
-        }
+/* ABOUT HERO */
+.about-hero{position:sticky;top:64px;z-index:40;margin-bottom:14px;border-radius:var(--radius);overflow:hidden;background:linear-gradient(180deg,var(--bg2),var(--bg1));border:1px solid var(--border);box-shadow:var(--shadow);height:140px}
+@media(min-width:721px){.about-hero{top:66px;height:160px}}
+.hero-sky{position:absolute;inset:0;overflow:hidden;transition:background 2s ease}
+.hero-sky.period-morning{background:linear-gradient(180deg,#0a1a2e 0%,#1e4a7a 45%,#6ea3c8 80%,#f4b47a 100%)}
+.hero-sky.period-noon{background:linear-gradient(180deg,#1a5a8a 0%,#3a9fd4 40%,#7bc8ea 75%,#d4ecfa 100%)}
+.hero-sky.period-evening{background:linear-gradient(180deg,#0a0a28 0%,#3a1a4a 30%,#9a3a4e 65%,#f59e42 100%)}
+.hero-sky.period-night{background:linear-gradient(180deg,#020812 0%,#061225 55%,#0a1e35 85%,#102a45 100%)}
 
-        .pin-box:focus, .pin-box.filled {
-            border-color: var(--gold);
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.8), 0 0 10px rgba(212, 175, 55, 0.3);
-        }
+.hero-stars{position:absolute;inset:0;opacity:0;transition:opacity 2s;z-index:0}
+.hero-sky.period-night .hero-stars{opacity:1}
+.hero-sky.period-morning .hero-stars{opacity:.15}
+.hero-sky.period-evening .hero-stars{opacity:.35}
+.hero-star{position:absolute;border-radius:50%;background:#fff;box-shadow:0 0 4px rgba(255,255,255,0.8),0 0 1px rgba(255,255,255,1);animation:twinkle 3s ease-in-out infinite}
 
-        .pin-box.success {
-            border-color: #2ecc71; 
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.8), 0 0 15px rgba(46, 204, 113, 0.4);
-        }
-        .pin-box.success .digit-display {
-            color: #2ecc71;
-        }
+.hero-moon{position:absolute;width:52px;height:52px;border-radius:50%;background:radial-gradient(circle at 35% 32%,#fafcff 0%,#dde5f0 40%,#a8b4c8 75%,#8a95a8 100%);box-shadow:0 0 32px rgba(190,215,255,0.55),0 0 70px rgba(140,180,240,0.30),inset -6px -6px 16px rgba(90,110,140,0.35);right:18%;top:22%;opacity:0;transition:opacity 2s, top 2s, right 2s;z-index:1;overflow:hidden}
+.hero-moon::before,.hero-moon::after{content:'';position:absolute;border-radius:50%;background:rgba(140,155,180,0.45);box-shadow:inset 1.5px 1.5px 3px rgba(70,85,115,0.5)}
+.hero-moon::before{width:14px;height:14px;top:28%;left:24%}
+.hero-moon::after{width:9px;height:9px;top:56%;left:56%;box-shadow:inset 1px 1px 2px rgba(70,85,115,0.5),14px -18px 0 2px rgba(140,155,180,0.35),-10px 8px 0 0px rgba(140,155,180,0.40),8px 4px 0 -1px rgba(140,155,180,0.30)}
+.hero-sky.period-night .hero-moon{opacity:1}
 
-        @keyframes slideUpBlur {
-            0% { transform: translateY(25px); opacity: 0; filter: blur(3px); }
-            100% { transform: translateY(0); opacity: 1; filter: blur(0); }
-        }
-        .digit-display.animate-num { 
-            animation: slideUpBlur 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; 
-        }
-        
-        .pin-box.spinning .digit-display { 
-            color: var(--gold); 
-            filter: blur(2px); 
-        }
+.hero-sun{position:absolute;width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 32% 30%,#fffceb 0%,#ffe28a 30%,#ffb347 65%,#f77f00 100%);box-shadow:0 0 40px rgba(255,220,100,0.85),0 0 90px rgba(255,180,50,0.55),0 0 160px rgba(255,150,40,0.30);opacity:0;transition:opacity 2s, left 2s, top 2s;z-index:1;left:10%;top:50%;transform:translateY(-50%)}
+.hero-sky.period-morning .hero-sun{opacity:1;left:12%;top:60%}
+.hero-sky.period-noon .hero-sun{opacity:1;left:50%;top:15%}
+.hero-sky.period-evening .hero-sun{opacity:1;left:82%;top:58%}
 
-        .verify-btn {
-            width: 100%; padding: 13px; background: linear-gradient(135deg, #555, #333);
-            border: none; border-radius: 14px; font-weight: bold; color: #888;
-            cursor: not-allowed; font-size: 15px; transition: all 0.3s;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.1);
-        }
-        .verify-btn.ready {
-            background: var(--gold-metal); color: #1a1500; cursor: pointer;
-            box-shadow: 0 5px 15px rgba(212, 175, 55, 0.3), inset 0 2px 0 rgba(255,255,255,0.4), inset 0 -3px 0 rgba(0,0,0,0.2);
-        }
-        .verify-btn.ready:active { transform: translateY(2px); box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+.hero-clouds{position:absolute;inset:0;pointer-events:none;z-index:2;overflow:hidden}
+.hero-cloud{position:absolute;background:rgba(245,250,255,0.85);border-radius:80px;filter:blur(1.2px);animation:cloudDrift linear infinite;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+.hero-cloud::before,.hero-cloud::after{content:'';position:absolute;background:inherit;border-radius:50%;box-shadow:inherit}
+.hero-cloud::before{width:55%;height:130%;top:-45%;left:18%}
+.hero-cloud::after{width:45%;height:110%;top:-32%;right:12%}
+.hero-cloud.cloud-1{width:110px;height:26px;top:22%;left:-140px;animation-duration:80s;opacity:.85}
+.hero-cloud.cloud-2{width:75px;height:20px;top:52%;left:-100px;animation-duration:100s;animation-delay:-30s;opacity:.70}
+.hero-cloud.cloud-3{width:140px;height:32px;top:70%;left:-160px;animation-duration:120s;animation-delay:-60s;opacity:.60}
+.hero-sky.period-night .hero-cloud{background:rgba(120,140,170,0.35);filter:blur(2px)}
+.hero-sky.period-evening .hero-cloud{background:rgba(255,200,180,0.55)}
+.hero-sky.period-morning .hero-cloud{background:rgba(255,240,220,0.80)}
+@keyframes cloudDrift{0%{transform:translateX(0)}100%{transform:translateX(calc(100vw + 260px))}}
 
-        .verify-message {
-            margin-top: 15px;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 13px;
-            text-align: center;
-        }
-        .verify-message--success {
-            background: rgba(46, 204, 113, 0.15);
-            border: 1px solid rgba(46, 204, 113, 0.3);
-            color: #2ecc71;
-        }
-        .verify-message--error {
-            background: rgba(231, 76, 60, 0.15);
-            border: 1px solid rgba(231, 76, 60, 0.3);
-            color: #e74c3c;
-        }
+.hero-text{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 24px;z-index:3;text-shadow:0 2px 12px rgba(0,0,0,0.7);pointer-events:none}
+.hero-greeting{font-size:22px;font-weight:900;color:#fff;letter-spacing:.5px}
+@media(min-width:721px){.hero-greeting{font-size:28px}}
+.hero-date{font-size:11.5px;color:rgba(255,255,255,0.85);margin-top:6px;font-variant-numeric:tabular-nums}
 
-        .storm-warning {
-            position: fixed; top: 20%; left: 50%; transform: translateX(-50%);
-            background: rgba(200, 0, 0, 0.8); color: white; padding: 10px 30px;
-            border-radius: 10px; font-weight: bold; font-size: 24px;
-            z-index: 9999; pointer-events: none; opacity: 0;
-            transition: opacity 0.3s; letter-spacing: 2px; box-shadow: 0 0 30px red;
-        }
-        body.storm-mode { background: radial-gradient(circle, #3a0000 0%, #000 100%); }
+/* Help */
+.help-section{margin-bottom:20px}
+.help-section h4{font-size:13px;font-weight:800;margin-bottom:8px;color:var(--accent);display:flex;align-items:center;gap:6px}
+.help-section p{font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:8px}
+.help-code{position:relative;background:rgba(0,0,0,0.28);border:1px solid var(--border);border-radius:10px;padding:12px 14px;padding-top:38px;margin-bottom:8px}
+[data-theme="light"] .help-code{background:rgba(240,244,250,0.75)}
+.help-code pre{font-family:'JetBrains Mono',Consolas,monospace;font-size:11px;line-height:1.65;direction:ltr;text-align:left;color:#c9d6e4;white-space:pre-wrap;word-wrap:break-word;margin:0;max-height:340px;overflow:auto}
+[data-theme="light"] .help-code pre{color:#2a3342}
+.help-code-copy{position:absolute;top:6px;left:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:4px 10px;border-radius:6px;font-family:inherit;font-size:10.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px}
+.help-code-copy:hover{background:var(--surface3);color:var(--text)}
+.help-code-copy.copied{background:rgba(52,211,153,0.18);color:#34d399;border-color:rgba(52,211,153,0.35)}
 
-        footer { text-align: center; margin-top: auto; padding: 20px; font-size: 12px; color: #444; z-index: 2;}
+.hidden{display:none !important}
+.flex-row{display:flex;gap:8px;flex-wrap:wrap}
+.mt-8{margin-top:8px}
+.mt-12{margin-top:12px}
+.muted{color:var(--text3);font-size:12px;text-align:center;padding:16px}
+.empty{text-align:center;padding:26px 12px;color:var(--text3);font-size:12.5px}
+.empty .ph{font-size:32px;display:block;margin-bottom:8px;opacity:.5}
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
 
-        /* درباره ما */
-        .about-section {
-            margin-bottom: 20px;
-            padding-bottom: 18px;
-            border-bottom: 1px solid #222;
-        }
-        .about-section:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-            padding-bottom: 0;
-        }
-        .about-section h3 {
-            color: var(--gold);
-            font-size: 14px;
-            margin-bottom: 10px;
-            text-align: right;
-        }
-        .about-section p {
-            color: #ccc;
-            font-size: 13px;
-            line-height: 1.7;
-            text-align: justify;
-        }
-        .contact-info {
-            color: #aaa;
-            font-size: 12px;
-            line-height: 1.8;
-            text-align: right;
-        }
-        .social-icons {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            margin-top: 12px;
-        }
-        .social-icon {
-            position: relative;
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
-            border: 1px solid #333;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 18px;
-        }
-        .social-icon:hover {
-            border-color: var(--gold);
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(212,175,55,0.3);
-        }
-        .social-icon .tooltip {
-            position: absolute;
-            bottom: 45px;
-            background: rgba(0,0,0,0.9);
-            color: var(--gold);
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 10px;
-            white-space: nowrap;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.25s;
-            border: 1px solid #333;
-        }
-        .social-icon:hover .tooltip {
-            opacity: 1;
-        }
+/* Settings & Reports grid */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:900px){.settings-grid{grid-template-columns:1fr}}
+.settings-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.settings-section h3{font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:7px;color:var(--text);padding-bottom:10px;border-bottom:1px solid var(--border)}
+.settings-section h3 .ph{color:var(--accent);font-size:16px}
+.settings-section .sub-label{font-size:11px;color:var(--text2);margin:10px 0 6px;font-weight:600;display:block}
+.reports-grid{display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-bottom:12px}
+@media(max-width:900px){.reports-grid{grid-template-columns:1fr}}
 
-        /* فرم تماس */
-        .contact-form {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            text-align: right;
-        }
-        .form-group label {
-            font-size: 12px;
-            color: #888;
-        }
-        .form-group input,
-        .form-group textarea {
-            background: rgba(20,20,20,0.8);
-            border: 1px solid #333;
-            border-radius: 10px;
-            padding: 10px 12px;
-            color: #ddd;
-            font-size: 13px;
-            font-family: system-ui, sans-serif;
-            transition: border-color 0.25s;
-        }
-        .form-group input:focus,
-        .form-group textarea:focus {
-            border-color: var(--gold);
-        }
-        .form-group textarea {
-            resize: vertical;
-            min-height: 80px;
-        }
-        .submit-contact-btn {
-            background: var(--gold-metal);
-            border: none;
-            border-radius: 12px;
-            padding: 11px;
-            color: #1a1500;
-            font-weight: bold;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.25s;
-            box-shadow: 0 4px 12px rgba(212,175,55,0.3);
-        }
-        .submit-contact-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(212,175,55,0.4);
-        }
-        .submit-contact-btn:active {
-            transform: translateY(0);
-        }
+/* Backup & Log tables */
+.backup-table{width:100%;border-collapse:collapse;font-size:12px;border-radius:11px;overflow:hidden;background:var(--surface);table-layout:fixed;min-width:520px}
+.backup-table th{text-align:right;padding:9px 10px;color:var(--text2);font-weight:600;font-size:11px;background:var(--stripe);white-space:nowrap}
+.backup-table td{padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;height:44px;font-size:12px}
+.backup-table tr{border-bottom:1px solid var(--border)}
+.backup-table td.actions{display:flex;align-items:center;gap:3px}
+.backup-table td.actions button{background:transparent;border:none;color:var(--text2);width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:14px;display:grid;place-items:center;transition:all .2s}
+.backup-table td.actions button:hover{background:var(--surface2);color:var(--text)}
+.backup-table td.actions button.del:hover{background:rgba(248,113,113,0.18);color:#f87171}
+.backup-table td.actions button.res:hover{background:rgba(52,211,153,0.18);color:#34d399}
+.backup-table td.actions button.dl:hover{background:rgba(34,211,238,0.18);color:#22d3ee}
+.badge-cnt{display:inline-block;padding:1px 7px;border-radius:5px;background:rgba(34,211,238,0.15);color:#22d3ee;font-size:10.5px;font-weight:700}
+.log-table{width:100%;border-collapse:collapse;font-size:11.5px;border-radius:11px;overflow:hidden;background:var(--surface);table-layout:fixed;min-width:560px}
+.log-table th{text-align:right;padding:8px 10px;color:var(--text2);font-weight:600;font-size:10.5px;background:var(--stripe);white-space:nowrap}
+.log-table td{padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;height:38px;font-size:11.5px}
+.log-table tr{border-bottom:1px solid var(--border)}
+.log-tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid transparent;white-space:nowrap}
+.log-tag.type-save{background:rgba(52,211,153,0.16);color:#34d399;border-color:rgba(52,211,153,0.3)}
+.log-tag.type-create{background:rgba(34,211,238,0.16);color:#22d3ee;border-color:rgba(34,211,238,0.3)}
+.log-tag.type-delete{background:rgba(248,113,113,0.16);color:#f87171;border-color:rgba(248,113,113,0.3)}
+.log-tag.type-backup{background:rgba(168,85,247,0.16);color:#c084fc;border-color:rgba(168,85,247,0.3)}
+.log-tag.type-restore{background:rgba(251,191,36,0.16);color:#fbbf24;border-color:rgba(251,191,36,0.3)}
+.log-tag.type-other{background:rgba(147,164,187,0.16);color:#93a4bb;border-color:rgba(147,164,187,0.3)}
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.filter-bar input,.filter-bar select{flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:9px;font-family:inherit;font-size:12px;outline:none}
+.filter-bar input:focus,.filter-bar select:focus{border-color:var(--accent)}
 
-        @keyframes float {
-            0%, 100% { transform: translateY(0) translateX(0); }
-            33% { transform: translateY(-8px) translateX(5px); }
-            66% { transform: translateY(5px) translateX(-5px); }
-        }
-        .particle {
-            position: absolute;
-            width: 3px;
-            height: 3px;
-            background: radial-gradient(circle, rgba(212,175,55,0.8), transparent);
-            border-radius: 50%;
-            pointer-events: none;
-            animation: float 4s ease-in-out infinite;
-            box-shadow: 0 0 6px rgba(212,175,55,0.6);
-        }
-    </style>
+/* Icon picker */
+.icon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:6px;margin-top:10px;max-height:340px;overflow-y:auto;padding:4px}
+.icon-cell{background:var(--surface);border:1px solid var(--border);color:var(--text);width:100%;aspect-ratio:1;border-radius:10px;cursor:pointer;font-size:20px;display:grid;place-items:center;transition:all .2s var(--spring)}
+.icon-cell:hover{background:var(--surface2);border-color:var(--accent);transform:scale(1.08)}
+.icon-cell.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent}
+</style>
 </head>
 <body>
 
-<canvas id="stars-canvas"></canvas>
-<div class="storm-warning" id="stormWarning">⚠️ ورود به منطقه ممنوعه ⚠️</div>
-
-<div class="main-wrapper">
-    <div class="visual-section">
-        <div id="coin-3d-container"></div>
-        <div id="flip-side-label">طرف رو (نقره)</div>
-        <button id="flip-btn" title="چرخش طرح سکه">
-            <span class="flip-icon">⟳</span>
-            <span id="flip-btn-text">نمایش پشت</span>
-        </button>
-    </div>
-
-    <div class="content-section">
-        <div class="content-card">
-            <h1 id="brandTitle">جواهری مشاهیر</h1>
-            <div class="subtitle">تضمین اصالت و درخشش ابدی</div>
-
-            <div class="verify-link" onclick="openModal('verifyModal')">استعلام شناسنامه دیجیتال</div>
-
-            <div class="menu">
-                <div class="menu-btn" onclick="openModal('aboutModal')">درباره ما</div>
-                <div class="menu-btn" onclick="openModal('contactModal')">تماس با ما</div>
-            </div>
-        </div>
-    </div>
+<!-- SPLASH -->
+<div class="splash" id="splash">
+  <div class="splash-stars" id="splashStars"></div>
+  <div class="splash-moon"></div>
+  <div class="splash-waves">
+    <div class="splash-wave"></div>
+    <div class="splash-wave"></div>
+  </div>
+  <div class="splash-inner">
+    <span class="logo-wrap">
+      <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="sailG1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#a5f3fc"/><stop offset="100%" stop-color="#22d3ee"/>
+          </linearGradient>
+          <linearGradient id="sailG2" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#f0abfc"/><stop offset="100%" stop-color="#a855f7"/>
+          </linearGradient>
+          <linearGradient id="hullG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#c28152"/><stop offset="100%" stop-color="#6b4226"/>
+          </linearGradient>
+        </defs>
+        <path d="M32 6 L32 40 L10 40 Z" fill="url(#sailG1)"/>
+        <path d="M34 6 L34 40 L54 40 Z" fill="url(#sailG2)"/>
+        <line x1="32" y1="6" x2="32" y2="42" stroke="#5c3a1e" stroke-width="2" stroke-linecap="round"/>
+        <path d="M6 42 Q32 56 58 42 L54 50 Q32 60 10 50 Z" fill="url(#hullG)" stroke="#4a2d18" stroke-width="1"/>
+        <path d="M6 42 Q32 47 58 42" stroke="#fbbf24" stroke-width="1.5" fill="none" opacity="0.7"/>
+      </svg>
+    </span>
+    <h1>کشتی نوح</h1>
+    <div class="msg" id="splashMsg">در حال بادبان‌کشی...</div>
+    <div class="bar"></div>
+    <div class="ver" id="splashVer">نسخه ۱.۴.۴ · گروه هنری اقاقیا</div>
+  </div>
 </div>
 
-<footer>طراحی و پیاده سازی الگوریتم گروه هنری اقاقیا 1388-1405</footer>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-icon">
+      <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="hSailG1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#a5f3fc"/><stop offset="100%" stop-color="#22d3ee"/>
+          </linearGradient>
+          <linearGradient id="hSailG2" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#f0abfc"/><stop offset="100%" stop-color="#a855f7"/>
+          </linearGradient>
+          <linearGradient id="hHullG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#c28152"/><stop offset="100%" stop-color="#6b4226"/>
+          </linearGradient>
+        </defs>
+        <path d="M32 6 L32 40 L10 40 Z" fill="url(#hSailG1)"/>
+        <path d="M34 6 L34 40 L54 40 Z" fill="url(#hSailG2)"/>
+        <line x1="32" y1="6" x2="32" y2="42" stroke="#5c3a1e" stroke-width="2" stroke-linecap="round"/>
+        <path d="M6 42 Q32 56 58 42 L54 50 Q32 60 10 50 Z" fill="url(#hHullG)" stroke="#4a2d18" stroke-width="1"/>
+        <path d="M6 42 Q32 47 58 42" stroke="#fbbf24" stroke-width="1.5" fill="none" opacity="0.7"/>
+      </svg>
+    </span>
+    <div style="text-align:right"><h1>کشتی نوح</h1><div class="sub">گروه هنری اقاقیا · v۱.۴.۴</div></div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="entry">ورود کد</button>
+    <button class="tab" data-tab="view">نمایش</button>
+    <button class="tab" data-tab="about">درباره</button>
+    <button class="tab" data-tab="settings">تنظیمات</button>
+  </nav>
+  <div class="topbar-actions">
+    <button class="icon-btn" id="themeBtn" data-tip="تغییر تم">🌙</button>
+    <button class="icon-btn" id="syncBtn" data-tip="ذخیره آنلاین">☁️</button>
+  </div>
+</header>
 
-<div id="verifyModal" class="modal-overlay" onclick="closeModal(event, 'verifyModal')">
-    <div class="modal-container" onclick="event.stopPropagation()">
-        <span class="close-modal" onclick="closeModal(event, 'verifyModal')">✕</span>
-        <h2 class="modal-title">تایید اصالت کالا</h2>
-        <form id="verifyForm" action="result.php" method="get">
-            <div class="pin-container" id="pinContainer"></div>
-            <input type="hidden" name="code" id="fullCodeInput">
-            <button type="button" id="submitBtn" class="verify-btn">بررسی اصالت</button>
-            <div id="verifyMessage" class="verify-message" style="display:none;"></div>
-        </form>
+<main>
+  <section class="page active" id="page-entry">
+    <div class="glass card">
+      <div class="row" style="grid-template-columns:1fr 1fr">
+        <div class="field" style="margin-bottom:6px">
+          <label>آیتم</label>
+          <div style="display:flex;gap:6px">
+            <div class="dd" id="itemDD" style="flex:1"></div>
+            <button class="icon-action" id="addItemBtn" data-tip="افزودن" style="min-width:42px;height:42px;padding:0"><i class="ph ph-plus"></i></button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:6px">
+          <label>نوع</label>
+          <div style="display:flex;gap:6px">
+            <div class="dd" id="catDD" style="flex:1"></div>
+            <button class="icon-action" id="addCatBtn" data-tip="افزودن" style="min-width:42px;height:42px;padding:0"><i class="ph ph-plus"></i></button>
+          </div>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:8px">
+        <label>کد آیتم</label>
+        <div class="code-wrap">
+          <div class="code-toolbar">
+            <button type="button" class="toolbar-save" id="tSave"><i class="ph ph-floppy-disk"></i><span>ذخیره</span></button>
+            <button type="button" id="tCopy" data-tip="کپی"><i class="ph ph-copy"></i></button>
+            <button type="button" id="tPaste" data-tip="پیست"><i class="ph ph-clipboard-text"></i></button>
+            <button type="button" id="tEye" data-tip="پیش‌نمایش"><i class="ph ph-eye"></i></button>
+            <button type="button" id="tClear" data-tip="پاک"><i class="ph ph-trash"></i></button>
+          </div>
+          <textarea class="code-input" id="codeInput" placeholder="===NOAH-ARK-ITEM-v1===&#10;{ ... }&#10;===END-NOAH-ARK-ITEM==="></textarea>
+        </div>
+      </div>
+      <div id="entryPreview"></div>
+      <div class="bottom-row">
+        <div class="date-box"><i class="ph ph-calendar-blank"></i><span id="nowDisplay">—</span></div>
+        <button class="icon-action" id="parseBtn" data-tip="بررسی"><i class="ph ph-scan"></i></button>
+        <button class="icon-action primary" id="saveBtn" data-tip="ذخیره"><i class="ph ph-floppy-disk"></i></button>
+      </div>
+      <div class="flex-row mt-8">
+        <button class="icon-action" id="bulkImportBtn" data-tip="ورود گروهی"><i class="ph ph-list-plus"></i><span class="lbl">ورود گروهی</span></button>
+        <button class="icon-action" id="helpBtn" data-tip="راهنما"><i class="ph ph-question"></i></button>
+        <button class="icon-action" id="copyGuideBtn" data-tip="کپی راهنما"><i class="ph ph-book-open"></i></button>
+      </div>
     </div>
+  </section>
+
+  <section class="page" id="page-view">
+    <div class="glass card" style="padding:8px"><div class="item-carousel" id="itemCarousel"></div></div>
+    <div class="glass card" id="viewControlCard" style="padding:10px">
+      <div class="version-switcher">
+        <button class="ver-btn" id="verPrev" data-tip="قبلی"><i class="ph ph-caret-right"></i></button>
+        <div class="ver-display">
+          <div><span class="ver-num" id="verNum">—</span><span class="ver-of" id="verOf"></span></div>
+          <div class="ver-date" id="verDate"></div>
+        </div>
+        <button class="ver-btn" id="verNext" data-tip="بعدی"><i class="ph ph-caret-left"></i></button>
+      </div>
+    </div>
+    <div id="viewArea"><div class="glass card"><div class="empty"><i class="ph ph-selection-all"></i>یک آیتم انتخاب کنید</div></div></div>
+  </section>
+
+  <section class="page" id="page-about">
+    <div class="about-hero">
+      <div class="hero-sky" id="heroSky">
+        <div class="hero-stars" id="heroStars"></div>
+        <div class="hero-moon" id="heroMoon"></div>
+        <div class="hero-sun" id="heroSun"></div>
+        <div class="hero-clouds">
+          <div class="hero-cloud cloud-1"></div>
+          <div class="hero-cloud cloud-2"></div>
+          <div class="hero-cloud cloud-3"></div>
+        </div>
+      </div>
+      <div class="hero-text">
+        <div class="hero-greeting" id="heroGreeting">وقت بخیر</div>
+        <div class="hero-date" id="heroDate">—</div>
+      </div>
+    </div>
+    <div class="subtabs">
+      <button class="subtab active" data-sub="info">شناسنامه</button>
+      <button class="subtab" data-sub="reports">آمار و سیستم</button>
+      <button class="subtab" data-sub="changelog">تاریخچه</button>
+      <button class="subtab" data-sub="backups">بک‌آپ</button>
+      <button class="subtab" data-sub="logs">لاگ</button>
+    </div>
+    
+    <div class="subpage active" id="sub-info">
+      <div class="glass card">
+        <div class="card-title"><i class="ph ph-info"></i>شناسنامه برنامه</div>
+        <table class="app-info-table" id="aboutTable"></table>
+      </div>
+      <div class="glass card">
+        <div class="card-title"><i class="ph ph-stack"></i>فناوری‌های استفاده شده</div>
+        <div class="tech-carousel-wrap">
+          <div class="tech-carousel-track" id="techTrack"></div>
+        </div>
+      </div>
+      <div class="glass card">
+        <div class="card-title"><i class="ph ph-clock-counter-clockwise"></i>تاریخچه نسخه‌ها</div>
+        <div class="version-accordion" id="versionAccordion"></div>
+      </div>
+    </div>
+
+    <div class="subpage" id="sub-reports">
+      <div class="reports-grid">
+        <div class="glass card" style="margin-bottom:0">
+          <div class="card-title"><i class="ph ph-table"></i>آمار کامل</div>
+          <table class="app-info-table" id="fullStatsTable"></table>
+        </div>
+        <div class="glass card" style="margin-bottom:0">
+          <div class="card-title"><i class="ph ph-list"></i>جدول پروژه‌ها</div>
+          <div class="table-scroll" style="max-height:280px">
+            <table class="data-table" id="projectsTable"></table>
+          </div>
+        </div>
+      </div>
+      <div class="glass card">
+        <div class="card-title"><i class="ph ph-heartbeat"></i>تست سلامت کتابخانه‌ها</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">با کلیک روی دکمه زیر، تمام کتابخانه‌های استفاده شده در تمام آیتم‌ها اسکن شده و وضعیت اتصال/وجود آن‌ها بررسی می‌شود.</p>
+        <button class="icon-action primary" id="runHealthCheckBtn" style="width:100%"><i class="ph ph-activity"></i><span>شروع اسکن کامل سیستم</span></button>
+        <div id="healthCheckResult" class="mt-12"></div>
+      </div>
+      <div class="glass card"><div class="card-title"><i class="ph ph-chart-pie"></i>نمودار دسته‌بندی‌ها</div><div id="categoryChart"></div></div>
+    </div>
+    
+    <div class="subpage" id="sub-changelog">
+      <div class="glass card">
+        <div class="card-title"><i class="ph ph-clock-counter-clockwise"></i>تاریخچه تغییرات</div>
+        <div id="changelogBox"></div>
+      </div>
+    </div>
+    
+    <div class="subpage" id="sub-backups">
+      <div class="glass card">
+        <div class="card-title"><i class="ph ph-cloud-arrow-down"></i>بک‌آپ‌ها</div>
+        <div class="table-scroll">
+          <table class="backup-table"><colgroup><col style="width:auto"><col style="width:80px"><col style="width:80px"><col style="width:120px"></colgroup><thead><tr><th>تاریخ</th><th>آیتم</th><th>نسخه</th><th>عملیات</th></tr></thead><tbody id="backupBody"></tbody></table>
+        </div>
+        <div class="flex-row mt-8">
+          <button class="icon-action primary" id="createBackupBtn"><i class="ph ph-plus-circle"></i><span>ایجاد بک‌آپ جدید</span></button>
+          <button class="icon-action" id="logsBtn"><i class="ph ph-file-text"></i><span>دانلود لاگ‌ها</span></button>
+          <button class="icon-action danger" id="resetBtn"><i class="ph ph-warning"></i><span>ریست کل</span></button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="subpage" id="sub-logs">
+      <div class="glass card">
+        <div class="card-title"><i class="ph ph-list-dashes"></i>آرشیو لاگ‌ها</div>
+        <div class="filter-bar">
+          <input type="text" id="logSearch" placeholder="جستجو...">
+          <select id="logFilter">
+            <option value="all">همه</option>
+            <option value="save">ذخیره</option>
+            <option value="create">ایجاد</option>
+            <option value="delete">حذف</option>
+            <option value="backup">بک‌آپ</option>
+            <option value="restore">بازگردانی</option>
+            <option value="other">سایر</option>
+          </select>
+        </div>
+        <div class="table-scroll">
+          <table class="log-table"><colgroup><col style="width:150px"><col style="width:80px"><col style="width:100px"><col></colgroup><thead><tr><th>زمان</th><th>نوع</th><th>عملیات</th><th>جزئیات</th></tr></thead><tbody id="logBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page" id="page-settings">
+    <div class="settings-grid">
+      <div class="settings-section">
+        <h3><i class="ph ph-palette"></i>ظاهر و تم</h3>
+        <span class="sub-label">پوسته برنامه</span>
+        <div class="theme-grid" id="presetGrid"></div>
+        <span class="sub-label">پروفایل رنگ</span>
+        <div class="color-grid" id="colorGrid"></div>
+        <span class="sub-label">حالت نمایش</span>
+        <div class="flex-row">
+          <button class="icon-action" id="setDark"><i class="ph ph-moon"></i> تیره</button>
+          <button class="icon-action" id="setLight"><i class="ph ph-sun"></i> روشن</button>
+        </div>
+      </div>
+      
+      <div class="settings-section">
+        <h3><i class="ph ph-package"></i>مدیریت کتابخانه‌ها</h3>
+        <p style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:10px">پوشه پروژه خود را انتخاب کنید. سیستم هوشمندانه تمام فایل‌های JS و CSS را پیدا کرده و در حافظه (IndexedDB) کش می‌کند.</p>
+        <div class="flex-row">
+          <button class="icon-action primary" id="pickLibFolderBtn"><i class="ph ph-folder-open"></i><span class="lbl">انتخاب پوشه</span></button>
+          <button class="icon-action success" id="saveToHostBtn"><i class="ph ph-upload-simple"></i><span class="lbl">ذخیره در هاست</span></button>
+        </div>
+        <div id="libFolderStatus" style="margin-top:10px;font-size:11.5px;color:var(--text3)"></div>
+        <div id="libCacheStatus" style="margin-top:6px;font-size:11px;color:var(--text3)"></div>
+      </div>
+
+      <div class="settings-section">
+        <h3><i class="ph ph-cloud-check"></i>ذخیره و اشتراک‌گذاری</h3>
+        <div class="flex-row">
+          <button class="icon-action primary" id="onlineSaveBtn" style="flex:1"><i class="ph ph-cloud-arrow-up"></i><span class="lbl">ذخیره آنلاین (فشرده)</span></button>
+          <button class="icon-action" id="onlineLoadBtn"><i class="ph ph-cloud-arrow-down"></i><span class="lbl">بارگذاری</span></button>
+        </div>
+        <div class="flex-row mt-8">
+          <button class="icon-action" id="shareUrlBtn"><i class="ph ph-link"></i><span class="lbl">لینک اشتراک</span></button>
+          <button class="icon-action" id="exportAllBtn"><i class="ph ph-download-simple"></i><span class="lbl">خروجی فایل</span></button>
+          <button class="icon-action" id="importAllBtn"><i class="ph ph-upload-simple"></i><span class="lbl">ورود فایل</span></button>
+        </div>
+        <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+      </div>
+
+      <div class="settings-section">
+        <h3><i class="ph ph-image"></i>آیکون آیتم</h3>
+        <div class="dd" id="iconItemDD"></div>
+        <div class="flex-row mt-8">
+          <button class="icon-action" id="pickLibBtn"><i class="ph ph-squares-four"></i><span class="lbl">از کتابخانه</span></button>
+          <button class="icon-action" id="uploadIconBtn"><i class="ph ph-upload"></i><span class="lbl">آپلود</span></button>
+          <input type="file" id="iconFile" accept="image/*" style="display:none">
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="mobile-nav" id="mobileNav">
+  <div class="nav-slider" id="navSlider"></div>
+  <button data-tab="entry" class="active"><i class="ph ph-pencil-simple"></i><span class="lbl">ورود</span></button>
+  <button data-tab="view"><i class="ph ph-eye"></i><span class="lbl">نمایش</span></button>
+  <button data-tab="about"><i class="ph ph-info"></i><span class="lbl">درباره</span></button>
+  <button data-tab="settings"><i class="ph ph-gear"></i><span class="lbl">تنظیمات</span></button>
+</nav>
+
+<!-- Dropdown Backdrop -->
+<div class="dd-backdrop" id="ddBackdrop"></div>
+
+<!-- MODALS -->
+<div class="modal-backdrop" id="addModal">
+  <div class="modal">
+    <div class="modal-head"><h3><i class="ph ph-plus-circle"></i><span id="addModalTitle">افزودن</span></h3><button class="icon-btn" id="addModalClose" style="width:32px;height:32px"><i class="ph ph-x"></i></button></div>
+    <div class="modal-body"><input type="text" id="addModalInput" placeholder="نام..." autocomplete="off"></div>
+    <div class="modal-foot"><button class="icon-action" id="addModalCancel">انصراف</button><button class="icon-action primary" id="addModalOk"><i class="ph ph-check"></i><span>تایید</span></button></div>
+  </div>
 </div>
 
-<div id="aboutModal" class="modal-overlay" onclick="closeModal(event, 'aboutModal')">
-    <div class="modal-container" onclick="event.stopPropagation()" style="max-width: 500px; max-height: 85vh; overflow-y: auto;">
-        <span class="close-modal" onclick="closeModal(event, 'aboutModal')">✕</span>
-        <h2 class="modal-title">درباره جواهری مشاهیر</h2>
-        
-        <div class="about-section">
-            <h3>معرفی</h3>
-            <p>جواهری مشاهیر با بیش از نیم قرن تجربه درخشان، همواره اصالت و کیفیت را سرلوحه کار خود قرار داده است. شناسنامه دیجیتال تضمین می‌کند قطعه شما کاملاً اصل و دارای ضمانت‌نامه معتبر است.</p>
-        </div>
-
-        <div class="about-section">
-            <h3>راه‌های ارتباطی</h3>
-            <div class="contact-info">
-                📍 خراسان رضوی، نیشابور، صد متر مانده به آرامگاه خیام<br>
-                📞 تلفن: 05142214956<br>
-                ✉️ ایمیل: info@mashahirid.ir
-            </div>
-        </div>
-
-        <div class="about-section">
-            <h3>شبکه‌های اجتماعی</h3>
-            <div class="social-icons">
-                <div class="social-icon" onclick="window.open('https://instagram.com/mashahirid', '_blank')">
-                    <span>📷</span>
-                    <div class="tooltip">اینستاگرام</div>
-                </div>
-                <div class="social-icon" onclick="window.open('https://t.me/mashahirid', '_blank')">
-                    <span>✈️</span>
-                    <div class="tooltip">تلگرام</div>
-                </div>
-                <div class="social-icon" onclick="window.open('https://wa.me/989123456789', '_blank')">
-                    <span>💬</span>
-                    <div class="tooltip">واتساپ</div>
-                </div>
-                <div class="social-icon" onclick="window.open('https://mashahirid.ir', '_blank')">
-                    <span>🌐</span>
-                    <div class="tooltip">وب‌سایت</div>
-                </div>
-            </div>
-        </div>
+<div class="modal-backdrop" id="bulkModal">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-head"><h3><i class="ph ph-list-plus"></i>ورود گروهی آیتم‌ها</h3><button class="icon-btn" id="bulkClose" style="width:32px;height:32px"><i class="ph ph-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:11.5px;color:var(--text2);margin-bottom:10px;line-height:1.7">چند بلوک <code style="background:var(--surface2);padding:1px 6px;border-radius:4px;font-size:10.5px">===NOAH-ARK-ITEM-v1===</code> را با هم پیست کنید. همه به‌طور خودکار ذخیره می‌شوند.</p>
+      <textarea id="bulkInput" placeholder="===NOAH-ARK-ITEM-v1===&#10;{ ... }&#10;===END-NOAH-ARK-ITEM===" style="min-height:280px"></textarea>
+      <div id="bulkResult" style="margin-top:10px"></div>
     </div>
+    <div class="modal-foot"><button class="icon-action" id="bulkCancel">انصراف</button><button class="icon-action primary" id="bulkOk"><i class="ph ph-check"></i><span>پردازش</span></button></div>
+  </div>
 </div>
 
-<div id="contactModal" class="modal-overlay" onclick="closeModal(event, 'contactModal')">
-    <div class="modal-container" onclick="event.stopPropagation()">
-        <span class="close-modal" onclick="closeModal(event, 'contactModal')">✕</span>
-        <h2 class="modal-title">تماس با ما</h2>
-        <form class="contact-form" onsubmit="handleContactSubmit(event)">
-            <div class="form-group">
-                <label>نام و نام خانوادگی</label>
-                <input type="text" required placeholder="نام خود را وارد کنید">
-            </div>
-            <div class="form-group">
-                <label>شماره تماس</label>
-                <input type="tel" required placeholder="09xxxxxxxxx">
-            </div>
-            <div class="form-group">
-                <label>ایمیل</label>
-                <input type="email" placeholder="example@email.com">
-            </div>
-            <div class="form-group">
-                <label>پیام شما</label>
-                <textarea required placeholder="پیام خود را بنویسید..."></textarea>
-            </div>
-            <button type="submit" class="submit-contact-btn">ارسال پیام</button>
-        </form>
-    </div>
+<div class="modal-backdrop" id="helpModal">
+  <div class="modal" style="max-width:920px">
+    <div class="modal-head"><h3><i class="ph ph-book-open"></i>راهنمای نوشتن کد (Prompt)</h3><button class="icon-btn" id="helpClose" style="width:32px;height:32px"><i class="ph ph-x"></i></button></div>
+    <div class="modal-body" id="helpBody"></div>
+    <div class="modal-foot"><button class="icon-action primary" id="helpCopy"><i class="ph ph-copy"></i><span>کپی همه</span></button><button class="icon-action" id="helpClose2">بستن</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head"><h3><i class="ph ph-warning"></i><span id="confirmTitle">تایید</span></h3><button class="icon-btn" id="confirmClose" style="width:32px;height:32px"><i class="ph ph-x"></i></button></div>
+    <div class="modal-body" style="padding:18px"><p id="confirmMsg" style="font-size:13px;line-height:1.7"></p></div>
+    <div class="modal-foot"><button class="icon-action" id="confirmCancel">انصراف</button><button class="icon-action danger" id="confirmOk">تایید</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="previewModal">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-head"><h3><i class="ph ph-eye"></i>پیش‌نمایش</h3><button class="icon-btn" id="previewClose" style="width:32px;height:32px"><i class="ph ph-x"></i></button></div>
+    <div class="modal-body" style="padding:0"><iframe id="previewFrame" sandbox="allow-scripts allow-same-origin" style="width:100%;min-height:60vh;border:none;background:transparent"></iframe></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="iconPickerModal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-head"><h3><i class="ph ph-squares-four"></i>انتخاب آیکون</h3><button class="icon-btn" id="iconPickerClose" style="width:32px;height:32px"><i class="ph ph-x"></i></button></div>
+    <div class="modal-body"><input type="text" id="iconSearch" placeholder="جستجو..."><div class="icon-grid" id="iconGrid"></div></div>
+    <div class="modal-foot"><button class="icon-action" id="iconPickerCancel">بستن</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="syncModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head"><h3><i class="ph ph-cloud-check"></i><span id="syncTitle">ذخیره آنلاین</span></h3><button class="icon-btn" id="syncClose" style="width:32px;height:32px"><i class="ph ph-x"></i></button></div>
+    <div class="modal-body" id="syncBody"></div>
+    <div class="modal-foot"><button class="icon-action" id="syncCancel">بستن</button></div>
+  </div>
 </div>
 
 <script>
-    // --- ستاره‌های جادویی ---
-    const canvas = document.getElementById('stars-canvas');
-    const ctx = canvas.getContext('2d');
-    let width, height, stars;
-    let isStorm = false;
+/* ============================================================
+   ⛵ کشتی نوح v1.4.4 — گروه هنری اقاقیا
+   ============================================================ */
+const STORAGE_KEY = 'noah_ark_db_v1';
+const THEME_KEY = 'noah_ark_theme';
+const PRESET_KEY = 'noah_ark_preset';
+const COLOR_KEY = 'noah_ark_color';
+const APP_VERSION = '1.4.4';
+const APP_BUILD_ISO = new Date().toISOString();
+const APP_BUILD_DATE_FA = new Intl.DateTimeFormat('fa-IR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}).format(new Date());
+const IDB_NAME = 'noah_ark_libs_v1';
 
-    function initStars() {
-        width = canvas.width = window.innerWidth;
-        height = canvas.height = window.innerHeight;
-        stars = [];
-        for (let i = 0; i < 50; i++) {
-            stars.push({
-                x: Math.random() * width, y: Math.random() * height,
-                radius: Math.random() * 1.5 + 0.4,
-                vx: (Math.random() - 0.5) * 0.4, vy: -Math.random() * 0.4 - 0.15,
-                glow: Math.random() * 6 + 3,
-                color: Math.random() > 0.5 ? '255,235,150' : '200,220,255'
-            });
-        }
+/* ===== SPLASH ===== */
+(function buildSplashStars(){
+  const el = document.getElementById('splashStars');
+  if(!el) return;
+  let h = '';
+  for(let i=0;i<50;i++){
+    const x = Math.random()*100, y = Math.random()*100;
+    const s = 0.8 + Math.random()*1.8;
+    const d = (Math.random()*3).toFixed(2);
+    h += `<div class="splash-star" style="left:${x}%;top:${y}%;width:${s}px;height:${s}px;animation-delay:${d}s"></div>`;
+  }
+  el.innerHTML = h;
+})();
+
+let splashHidden = false;
+function hideSplash(){ if(splashHidden) return; splashHidden=true; const s=document.getElementById('splash'); if(!s) return; s.classList.add('hide'); setTimeout(()=>{ try{s.remove();}catch(e){} }, 700); }
+window.addEventListener('error', hideSplash);
+window.addEventListener('unhandledrejection', hideSplash);
+setTimeout(hideSplash, 2400);
+if(document.readyState === 'complete') hideSplash(); else window.addEventListener('load', hideSplash, {once:true});
+
+/* ===== HELPERS ===== */
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const faNum = n => String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function safeDate(iso){ if(!iso) return null; try{ const d=new Date(iso); return isNaN(d.getTime())?null:d; }catch(e){ return null; } }
+function jDate(iso){ const d=safeDate(iso); if(!d) return '—'; try{ const wd=new Intl.DateTimeFormat('fa-IR',{weekday:'long'}).format(d); const dt=new Intl.DateTimeFormat('fa-IR',{day:'2-digit',month:'long',year:'numeric'}).format(d); const tm=new Intl.DateTimeFormat('fa-IR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(d); return wd+' '+dt+' · '+tm; }catch(e){ return '—'; } }
+function jDateShort(iso){ const d=safeDate(iso); if(!d) return '—'; try{ return new Intl.DateTimeFormat('fa-IR',{year:'numeric',month:'2-digit',day:'2-digit'}).format(d); }catch(e){ return '—'; } }
+function jDateFull(iso){ const d=safeDate(iso); if(!d) return '—'; try{ const wd=new Intl.DateTimeFormat('fa-IR',{weekday:'long'}).format(d); const dt=new Intl.DateTimeFormat('fa-IR',{day:'2-digit',month:'long',year:'numeric'}).format(d); const tm=new Intl.DateTimeFormat('fa-IR',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(d); return wd+' '+dt+' · '+tm; }catch(e){ return '—'; } }
+function daysAgo(iso){
+  const d = safeDate(iso); if(!d) return '—';
+  const diff = Math.floor((Date.now() - d.getTime()) / (1000*60*60*24));
+  if(diff <= 0) return 'امروز';
+  if(diff === 1) return 'دیروز';
+  if(diff < 30) return faNum(diff)+' روز پیش';
+  if(diff < 365) return faNum(Math.floor(diff/30))+' ماه پیش';
+  return faNum(Math.floor(diff/365))+' سال پیش';
+}
+
+function toast(msg, type=''){
+  const t = document.createElement('div');
+  t.className = 'toast '+type; t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),350); },2600);
+}
+function copyText(text){
+  if(!text){ toast('چیزی برای کپی نیست','err'); return; }
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(()=>toast('✓ کپی شد','ok')).catch(()=>fallbackCopy(text)); } else fallbackCopy(text);
+}
+function fallbackCopy(text){
+  const ta = document.createElement('textarea'); ta.value = text;
+  ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('✓ کپی شد','ok'); }catch(e){ toast('کپی ناموفق','err'); }
+  ta.remove();
+}
+async function pasteFromClipboard(){
+  try{ if(navigator.clipboard && navigator.clipboard.readText) return await navigator.clipboard.readText(); return null; }catch(e){ return null; }
+}
+function downloadFile(name, content, mime='application/json'){
+  const blob = new Blob([content],{type:mime+';charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },100);
+}
+
+/* ===== INDEXEDDB LIB CACHE ===== */
+let idbDB = null;
+let libDirHandle = null;
+
+async function openLibDB(){
+  if(idbDB) return idbDB;
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('libs')) d.createObjectStore('libs', {keyPath:'name'});
+      if(!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', {keyPath:'key'});
+    };
+    req.onsuccess = e => { idbDB = e.target.result; resolve(idbDB); };
+    req.onerror = e => reject(e.target.error);
+  });
+}
+async function checkLibCache(name){
+  try{ const db = await openLibDB(); return new Promise(res => { const tx=db.transaction('libs','readonly'); const req=tx.objectStore('libs').get(name); req.onsuccess=()=>res(req.result||null); req.onerror=()=>res(null); }); }catch(e){ return null; }
+}
+async function saveLibCache(name, data, type='js'){
+  try{ const db = await openLibDB(); return new Promise(res => { const tx=db.transaction('libs','readwrite'); tx.objectStore('libs').put({name,data,type,ts:Date.now()}); tx.oncomplete=()=>res(true); tx.onerror=()=>res(false); }); }catch(e){ return false; }
+}
+async function listCachedLibs(){
+  try{ const db = await openLibDB(); return new Promise(res => { const tx=db.transaction('libs','readonly'); const req=tx.objectStore('libs').getAll(); req.onsuccess=()=>res(req.result||[]); req.onerror=()=>res([]); }); }catch(e){ return []; }
+}
+async function saveDirHandle(handle){
+  try{ const db = await openLibDB(); return new Promise(res => { const tx=db.transaction('meta','readwrite'); tx.objectStore('meta').put({key:'libDir', handle}); tx.oncomplete=()=>res(true); tx.onerror=()=>res(false); }); }catch(e){ return false; }
+}
+async function loadDirHandle(){
+  try{ const db = await openLibDB(); return new Promise(res => { const tx=db.transaction('meta','readonly'); const req=tx.objectStore('meta').get('libDir'); req.onsuccess=()=>res(req.result?req.result.handle:null); req.onerror=()=>res(null); }); }catch(e){ return null; }
+}
+
+/* ===== FOLDER RECURSION ===== */
+async function findFileRecursive(dirHandle, query) {
+  if (!dirHandle) return null;
+  const q = query.toLowerCase().replace(/[^a-z0-9]/g, '');
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'file') {
+      const fname = entry.name.toLowerCase();
+      if (!/\.(js|css)$/i.test(fname)) continue;
+      const cleanName = fname.replace(/\.(js|css)$/i, '').replace(/[^a-z0-9]/g, '');
+      if (cleanName.includes(q) || q.includes(cleanName) || cleanName === q) {
+        const file = await entry.getFile();
+        const content = await file.text();
+        const type = fname.endsWith('.css') ? 'css' : 'js';
+        return { content, type, filename: entry.name };
+      }
+    } else if (entry.kind === 'directory') {
+      const result = await findFileRecursive(entry, query);
+      if (result) return result;
     }
+  }
+  return null;
+}
 
-    function drawStars() {
-        ctx.clearRect(0, 0, width, height);
-        for (let star of stars) {
-            ctx.beginPath();
-            ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${star.color}, 0.8)`;
-            ctx.shadowBlur = isStorm ? 20 : star.glow;
-            ctx.shadowColor = isStorm ? 'red' : `rgba(${star.color}, 1)`;
-            ctx.fill();
-        }
-        ctx.shadowBlur = 0;
-        updateStars();
-        requestAnimationFrame(drawStars);
-    }
-
-    function updateStars() {
-        let speedMult = isStorm ? 15 : 1;
-        for (let star of stars) {
-            star.x += star.vx * speedMult;
-            star.y += star.vy * speedMult;
-            if (star.y < 0) star.y = height;
-            if (star.x < 0) star.x = width;
-            if (star.x > width) star.x = 0;
-        }
-    }
-    window.addEventListener('resize', initStars);
-    initStars(); drawStars();
-
-    // --- مدیریت مودال‌ها ---
-    function openModal(modalId) {
-        const modal = document.getElementById(modalId);
-        modal.style.display = 'flex';
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                modal.classList.add('show');
-                if (modalId === 'verifyModal') {
-                    setTimeout(() => pinBoxes[0] && pinBoxes[0].focus(), 50);
-                }
-            });
-        });
-    }
-
-    function closeModal(event, modalId) {
-        const modal = document.getElementById(modalId);
-        if (event.target === modal || event.target.classList.contains('close-modal')) {
-            modal.classList.remove('show');
-            setTimeout(() => modal.style.display = 'none', 350);
-        }
-    }
-
-    // --- فرم تماس ---
-    function handleContactSubmit(e) {
-        e.preventDefault();
-        const btn = e.target.querySelector('.submit-contact-btn');
-        btn.textContent = '✓ پیام ارسال شد';
-        btn.style.background = 'linear-gradient(135deg, #2ecc71, #27ae60)';
-        btn.style.color = '#fff';
-        setTimeout(() => {
-            btn.textContent = 'ارسال پیام';
-            btn.style.background = '';
-            btn.style.color = '';
-            e.target.reset();
-        }, 2500);
-    }
-
-    // --- ساخت باکس‌های PIN شش‌رقمی ---
-    const pinContainer = document.getElementById('pinContainer');
-    const PIN_COUNT = 6;
-    let pinValues = new Array(PIN_COUNT).fill('');
-    let pinBoxEls = [];
-    let pinHiddenInputs = [];
-
-    for (let i = 0; i < PIN_COUNT; i++) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'pin-box';
-        wrapper.setAttribute('data-index', i);
-
-        const digitDisplay = document.createElement('div');
-        digitDisplay.className = 'digit-display';
-        wrapper.appendChild(digitDisplay);
-
-        // input مخفی برای دریافت ورودی
-        const hiddenInput = document.createElement('input');
-        hiddenInput.type = 'text';
-        hiddenInput.inputMode = 'numeric';
-        hiddenInput.maxLength = 1;
-        hiddenInput.style.cssText = 'position:absolute;opacity:0;width:100%;height:100%;top:0;left:0;cursor:pointer;';
-        wrapper.appendChild(hiddenInput);
-
-        pinContainer.appendChild(wrapper);
-        pinBoxEls.push(wrapper);
-        pinHiddenInputs.push(hiddenInput);
-
-        wrapper.addEventListener('click', () => hiddenInput.focus());
-
-        hiddenInput.addEventListener('input', (e) => {
-            const val = e.target.value.replace(/\D/g, '').slice(-1);
-            e.target.value = val;
-            if (val) {
-                setDigit(i, val);
-                if (i < PIN_COUNT - 1) pinHiddenInputs[i + 1].focus();
-            } else {
-                clearDigit(i);
-            }
-            checkFormReady();
-        });
-
-        hiddenInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace') {
-                if (pinValues[i]) {
-                    clearDigit(i);
-                } else if (i > 0) {
-                    clearDigit(i - 1);
-                    pinHiddenInputs[i - 1].focus();
-                }
-                checkFormReady();
-            }
-        });
-    }
-
-    function setDigit(index, val) {
-        pinValues[index] = val;
-        const display = pinBoxEls[index].querySelector('.digit-display');
-        display.textContent = val;
-        display.classList.remove('animate-num');
-        void display.offsetWidth; // reflow
-        display.classList.add('animate-num');
-        pinBoxEls[index].classList.add('filled');
-    }
-
-    function clearDigit(index) {
-        pinValues[index] = '';
-        pinHiddenInputs[index].value = '';
-        const display = pinBoxEls[index].querySelector('.digit-display');
-        display.textContent = '';
-        pinBoxEls[index].classList.remove('filled', 'success');
-    }
-
-    function checkFormReady() {
-        const allFilled = pinValues.every(v => v.length === 1);
-        submitBtn.classList.toggle('ready', allFilled);
-    }
-
-    const submitBtn = document.getElementById('submitBtn');
-
-    function setVerifyState(state, message = '') {
-        const msgEl = document.getElementById('verifyMessage');
-        switch (state) {
-            case 'idle':
-                submitBtn.disabled = false;
-                submitBtn.classList.add('ready');
-                submitBtn.innerText = 'بررسی اصالت';
-                msgEl.style.display = 'none';
-                msgEl.className = 'verify-message';
-                break;
-            case 'loading':
-                submitBtn.disabled = true;
-                submitBtn.classList.remove('ready');
-                submitBtn.innerText = 'در حال ارتباط با سرور...';
-                msgEl.style.display = 'none';
-                break;
-            case 'success':
-                submitBtn.disabled = false;
-                submitBtn.classList.add('ready');
-                submitBtn.innerText = 'بررسی اصالت';
-                msgEl.className = 'verify-message verify-message--success';
-                msgEl.innerHTML = '✅ ' + message;
-                msgEl.style.display = 'block';
-                break;
-            case 'error':
-                submitBtn.disabled = false;
-                submitBtn.classList.add('ready');
-                submitBtn.innerText = 'بررسی مجدد';
-                msgEl.className = 'verify-message verify-message--error';
-                msgEl.innerHTML = '❌ ' + message;
-                msgEl.style.display = 'block';
-                break;
-        }
-    }
-
-    submitBtn.addEventListener('click', async () => {
-        if (!submitBtn.classList.contains('ready')) return;
-
-        const originalValues = [...pinValues];
-        const fullCode = originalValues.join('');
-
-        setVerifyState('loading');
-
-        // انیمیشن چرخش سریع ارقام
-        let spinIntervals = [];
-        pinBoxEls.forEach((box, i) => {
-            box.classList.add('spinning');
-            const display = box.querySelector('.digit-display');
-            spinIntervals.push(setInterval(() => {
-                display.textContent = Math.floor(Math.random() * 10);
-            }, 40));
-        });
-
+async function scanFolderAndCache(){
+  if(!libDirHandle) return {cached:0, total:0};
+  let cached = 0, total = 0;
+  async function scan(dir) {
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file') {
+        if (!/\.(js|css)$/i.test(entry.name)) continue;
+        total++;
         try {
-            const res = await fetch(`?ajax_verify=${encodeURIComponent(fullCode)}`);
-            const data = await res.json();
+          const file = await entry.getFile();
+          const content = await file.text();
+          const type = entry.name.endsWith('.css') ? 'css' : 'js';
+          const name = entry.name.replace(/\.(js|css)$/i, '');
+          await saveLibCache(name, content, type);
+          cached++;
+        } catch(e) {}
+      } else if (entry.kind === 'directory') {
+        await scan(entry);
+      }
+    }
+  }
+  await scan(libDirHandle);
+  return {cached, total};
+}
 
-            await new Promise(resolve => {
-                pinBoxEls.forEach((box, i) => {
-                    setTimeout(() => {
-                        clearInterval(spinIntervals[i]);
-                        const display = box.querySelector('.digit-display');
-                        display.textContent = originalValues[i];
-                        box.classList.remove('spinning');
-                        if (data.valid) {
-                            box.classList.add('success');
-                        }
-                        display.classList.remove('animate-num');
-                        void display.offsetWidth;
-                        display.classList.add('animate-num');
-                        if (i === pinBoxEls.length - 1) resolve();
-                    }, i * 80);
-                });
-            });
-
-            await new Promise(r => setTimeout(r, 300));
-
-            if (data.valid) {
-                setVerifyState('success', 'شناسنامه معتبر است — در حال انتقال...');
-                document.getElementById('fullCodeInput').value = fullCode;
-                await new Promise(r => setTimeout(r, 800));
-                document.getElementById('verifyForm').submit();
-            } else {
-                const msgs = {
-                    'format'   : 'فرمت کد وارد‌شده صحیح نیست',
-                    'not_found': 'این شناسنامه در سیستم یافت نشد',
-                    'revoked'  : 'این شناسنامه باطل شده است',
-                    'expired'  : 'این شناسنامه منقضی شده است',
-                    'db_error' : 'خطا در ارتباط با سرور'
-                };
-                setVerifyState('error', msgs[data.reason] ?? 'خطای ناشناخته');
-
-                setTimeout(() => {
-                    for (let i = 0; i < PIN_COUNT; i++) clearDigit(i);
-                    checkFormReady();
-                    setVerifyState('idle');
-                    pinHiddenInputs[0].focus();
-                }, 2000);
-            }
-
-        } catch (err) {
-            spinIntervals.forEach(clearInterval);
-            pinBoxEls.forEach((box, i) => {
-                const display = box.querySelector('.digit-display');
-                display.textContent = originalValues[i];
-                box.classList.remove('spinning');
-            });
-            setVerifyState('error', 'خطا در ارتباط با سرور');
-        }
-    });
-
-    // --- سه کلیک روی عنوان → لاگین ---
-        // --- 7 کلیک روی عنوان "جواهری مشاهیر" → حالت طوفانی (ممنوعه) ---
-    let titleClicks = 0, titleClickTimer;
-    document.getElementById('brandTitle').addEventListener('click', () => {
-        titleClicks++;
-        clearTimeout(titleClickTimer);
-        titleClickTimer = setTimeout(() => titleClicks = 0, 1500); // ریست شدن شمارنده بعد از 1.5 ثانیه
-        
-        if (titleClicks === 7 && !isStorm) {
-            isStorm = true;
-            document.body.classList.add('storm-mode');
-            const warning = document.getElementById('stormWarning');
-            warning.style.opacity = 1;
-            
-            setTimeout(() => {
-                isStorm = false;
-                document.body.classList.remove('storm-mode');
-                warning.style.opacity = 0;
-                titleClicks = 0;
-            }, 5000); // پایان طوفان بعد از 5 ثانیه
-        }
-    });
-
-    // --- 3 کلیک روی سکه سه بعدی → ورود به ادمین ---
-    let coinClicks = 0, coinClickTimer;
-    document.getElementById('coin-3d-container').addEventListener('click', () => {
-        coinClicks++;
-        clearTimeout(coinClickTimer);
-        coinClickTimer = setTimeout(() => coinClicks = 0, 1500);
-        
-        if (coinClicks === 3) {
-            window.location.href = 'https://mashahirid.ir/admin/login.php';
-        }
-    });
-
-
-    // coinParams
-    window.coinParams = {
-    speed:       0.008,
-    ambientInt:  0.9,    // افزایش نور محیطی (قبلا 0.6 بود)
-    plightInt:   45.0,   // افزایش شدت نور نقطه‌ای (قبلا 20.0 بود)
-    bumpFront:   0.7,    // افزایش شدید برجستگی روی سکه (قبلا 0.15 بود)
-    bumpBack:    0.7,    // افزایش برجستگی پشت سکه
-    lightCount:  4,
-    labelFront:  'مشاهیر',
-    labelBack:   'QR',
-    lightColor:  0xffffff,
-    lightColor2: 0xffd700,
-    flipTo:      null,
-    dirty: false
+/* ===== CDN MAPPINGS ===== */
+const SPECIAL_LIBS = {
+  'vazirmatn font':'vazirmatn@33.0.3/Vazirmatn-font-face.css',
+  'vazirmatn':'vazirmatn@33.0.3/Vazirmatn-font-face.css',
+  'phosphor icons':'@phosphor-icons/web@2.1.1/src/regular/style.css',
+  '@phosphor-icons/web':'@phosphor-icons/web@2.1.1/src/regular/style.css'
 };
+const NPM_PATHS = {
+  'chart.js':'chart.js@4.4.0/dist/chart.umd.min.js',
+  'gsap':'gsap@3.12.2/dist/gsap.min.js',
+  'three':'three@0.160.0/build/three.min.js',
+  'react':'react@18.2.0/umd/react.production.min.js',
+  'vue':'vue@3.3.8/dist/vue.global.prod.js',
+  'bootstrap':'bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js',
+  'jquery':'jquery@3.7.1/dist/jquery.min.js',
+  'lodash':'lodash@4.17.21/lodash.min.js',
+  'axios':'axios@1.6.0/dist/axios.min.js',
+  'd3':'d3@7.8.5/dist/d3.min.js',
+  'alpinejs':'alpinejs@3.13.1/dist/cdn.min.js',
+  'gridjs':'gridjs@6.0.6/dist/gridjs.umd.js',
+  'gridjs css':'gridjs@6.0.6/dist/theme/mermaid.min.css',
+  'sweetalert2':'sweetalert2@11.10.1/dist/sweetalert2.all.min.js',
+  'swiper':'swiper@11.0.5/swiper-bundle.min.js',
+  'swiper css':'swiper@11.0.5/swiper-bundle.min.css',
+  'ag grid 31':'ag-grid-community@31.0.0/dist/ag-grid-community.min.js',
+  'ag-grid 31':'ag-grid-community@31.0.0/dist/ag-grid-community.min.js',
+  'ag grid':'ag-grid-community@31.0.0/dist/ag-grid-community.min.js',
+  'ag-grid':'ag-grid-community@31.0.0/dist/ag-grid-community.min.js',
+  'ag-grid-community':'ag-grid-community@31.0.0/dist/ag-grid-community.min.js',
+  'persian datepicker':'persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js',
+  'persian-datepicker':'persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js',
+  'persian date':'persian-date@1.2.0/dist/persian-date.min.js',
+  'persian-date':'persian-date@1.2.0/dist/persian-date.min.js'
+};
+function getLibNpmPath(lib){
+  const k = String(lib||'').toLowerCase().trim();
+  return SPECIAL_LIBS[k] || NPM_PATHS[k] || null;
+}
+function getLibCDNUrls(lib){
+  const path = getLibNpmPath(lib);
+  if(!path) return [];
+  return [`https://cdn.jsdelivr.net/npm/${path}`, `https://unpkg.com/${path}`];
+}
 
+const libStatusMemory = new Map();
 
-    // دکمه flip
-    let coinFaceFront = true;
-    const flipBtn       = document.getElementById('flip-btn');
-    const flipBtnText   = document.getElementById('flip-btn-text');
-    const flipSideLabel = document.getElementById('flip-side-label');
+async function getLibContent(dep){
+  const cached = await checkLibCache(dep);
+  if(cached) return {ok:true, content:cached.data, type:cached.type, source:'cache'};
+  const folderHit = await findFileRecursive(libDirHandle, dep);
+  if(folderHit){
+    await saveLibCache(dep, folderHit.content, folderHit.type);
+    return {ok:true, content:folderHit.content, type:folderHit.type, source:'folder'};
+  }
+  const urls = getLibCDNUrls(dep);
+  if(urls.length > 0){
+    const url = urls[0];
+    const type = url.endsWith('.css') ? 'css' : 'js';
+    return {ok:true, url, type, source:'online'};
+  }
+  return {ok:false};
+}
+function isBuiltIn(lib) {
+  const l = String(lib).toLowerCase();
+  return l.includes('vazirmatn') || l.includes('phosphor');
+}
+async function getLibStatus(dep){
+  if (libStatusMemory.has(dep)) return libStatusMemory.get(dep);
+  let result = {status:'red', label:'یافت نشد', source:'none'};
+  const cached = await checkLibCache(dep);
+  if(cached) { result = {status:'green', label:'در کش', source:'cache'}; libStatusMemory.set(dep, result); return result; }
+  const folderHit = await findFileRecursive(libDirHandle, dep);
+  if(folderHit) { result = {status:'green', label:'در پوشه', source:'folder'}; libStatusMemory.set(dep, result); return result; }
+  if (isBuiltIn(dep)) { result = {status:'green', label:'پیش‌فرض', source:'builtin'}; libStatusMemory.set(dep, result); return result; }
+  const urls = getLibCDNUrls(dep);
+  if (urls.length > 0) { result = {status:'green', label:'آنلاین (CDN)', source:'online'}; }
+  libStatusMemory.set(dep, result);
+  return result;
+}
 
-    flipBtn.addEventListener('click', () => {
-        coinFaceFront = !coinFaceFront;
-        flipBtn.classList.add('flipping');
-        setTimeout(() => flipBtn.classList.remove('flipping'), 500);
-        if (coinFaceFront) {
-            flipBtnText.textContent   = 'نمایش پشت';
-            flipSideLabel.textContent = 'طرف رو (نقره)';
-            flipSideLabel.style.color = '#aaa';
-        } else {
-            flipBtnText.textContent   = 'نمایش رو';
-            flipSideLabel.textContent = 'طرف پشت (طلا)';
-            flipSideLabel.style.color = '#d4af37';
+/* ===== DB ===== */
+function getInitialDB(){
+  const now = new Date().toISOString();
+  return {
+    meta:{
+      app:'کشتی نوح', version: APP_VERSION,
+      createdAt: now, created: now,
+      algorithm:'گروه هنری اقاقیا',
+      designer:'حسن حاجی قاسمی',
+      changelog:[
+        {
+          version:'1.4.4',
+          ts: now,
+          newItems:[
+            'کروسل افقی خودکار فناوری‌های استفاده شده با لوپ بی‌پایان',
+            'آکاردیون تاریخچه نسخه‌ها (فقط یک کارت باز با انیمیشن)',
+            'پس‌زمینه بلور برای لیست‌های باز (Dropdown Backdrop)',
+            'قالب راهنمای پرامپت‌محور برای AI و برنامه‌نویس',
+            'ردیف تاریخ آخرین بروزرسانی در شناسنامه با محاسبه خودکار «چند روز پیش»',
+            'پشتیبانی کامل از AG Grid 31 و Persian Datepicker در جدول کتابخانه‌ها',
+            'دکمه‌های عملیات بالای جدول اطلاعات در صفحه نمایش'
+          ],
+          updates:[
+            'نسخه برنامه به v۱.۴.۴ بروزرسانی شد',
+            'آیکون هدر با SVG واقعی (بادبان و بدنه کشتی) جایگزین ایموجی شد',
+            'آسمان درباره ما ثابت و بدون چرخه دوره (زمان حال)',
+            'ابرها، ستاره‌ها و ماه با گرادیانت و بافت واقعی‌تر',
+            'پیش‌نمایش تمام‌عرض بدون پدینگ چپ/راست با ارتفاع مناسب',
+            'پس‌زمینه بلور برای لیست‌ها هنگام باز شدن',
+            'تفاوت چشمگیر بین پوسته‌ها (default / material / liquid / win11)',
+            'حذف فیلد «موضوع» از صفحه ورود کد — فقط آیتم و نوع'
+          ],
+          fixes:[
+            'رفع مشکل نمایش کتابخانه‌های AG Grid 31 و Persian Datepicker در جدول اطلاعات',
+            'رفع مشکل اجرای نمونه کد قدیمی جدول سفارشات در پیش‌نمایش',
+            'رفع مشکل ثبت‌نشدن خودکار نوع آیتم هنگام ذخیره',
+            'بسته‌شدن خودکار لیست قبلی هنگام باز کردن لیست جدید',
+            'بهبود پایداری راهنمای کد (نمونه‌ها در باکس مخصوص)'
+          ],
+          notes:'نسخه پایدار — آیکون واقعی، آسمان ثابت، کروسل فناوری، آکاردیون نسخه، تم‌های متمایز، پشتیبانی AG Grid.'
+        },
+        {
+          version:'1.4.3',
+          ts: new Date(Date.now() - 86400000*2).toISOString(),
+          notes:'رفع کامل باگ استایل تب‌های درباره ما، اضافه شدن دکمه دانلود کتابخانه به صفحه نمایش، اصلاح آپلود در هاست'
+        },
+        {
+          version:'1.4.2',
+          ts: new Date(Date.now() - 86400000*5).toISOString(),
+          notes:'رفع خطاهای Null و جابجایی هدر'
+        },
+        {
+          version:'1.0',
+          ts: new Date(Date.now() - 86400000*30).toISOString(),
+          notes:'نسخه اولیه'
         }
-        window.coinParams.flipTo = coinFaceFront ? 'front' : 'back';
+      ]
+    },
+    items:{},
+    categories:['کامپوننت','لایه','فرم','تعاملی','استایل','ابزارک','نمودار','بنر','کارت','دکمه','گالری','ناوبری'],
+    subjects:['عمومی','فناوری','هنری','آموزشی','سرگرمی','ابزار','کشاورزی','سلامت','مالی','رسانه'],
+    backups:[],
+    logs:[{ts:now, action:'نصب نسخه v'+APP_VERSION, type:'create', detail:'کشتی نوح '+APP_VERSION}]
+  };
+}
+function loadDB(){
+  let raw;
+  try{ raw = localStorage.getItem(STORAGE_KEY); }catch(e){ return getInitialDB(); }
+  if(!raw) return getInitialDB();
+  let p;
+  try{ p = JSON.parse(raw); }catch(err){
+    try{ localStorage.setItem(STORAGE_KEY+'_corrupt_'+Date.now(), raw); }catch(e){}
+    setTimeout(()=>toast('داده‌های قبلی خراب بودند — در کلید پشتیبان حفظ شدند','err'),2000);
+    return getInitialDB();
+  }
+  if(!p || typeof p !== 'object' || !p.items) return getInitialDB();
+  if(!p.backups) p.backups = [];
+  if(!p.categories) p.categories = [];
+  if(!p.subjects) p.subjects = ['عمومی','فناوری'];
+  if(!p.logs) p.logs = [];
+  if(!p.meta) p.meta = {};
+  if(!p.meta.createdAt) p.meta.createdAt = p.meta.created || new Date().toISOString();
+  if(!Array.isArray(p.meta.changelog)) p.meta.changelog = [];
+  
+  // ensure 1.4.4 entry exists
+  const has144 = p.meta.changelog.some(c => c.version === '1.4.4');
+  if(!has144){
+    const fresh = getInitialDB();
+    p.meta.changelog.unshift(fresh.meta.changelog[0]);
+  }
+  p.meta.version = APP_VERSION;
+  return p;
+}
+let db = loadDB();
+function saveDB(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+  catch(e){ toast('خطا در ذخیره — فضای مرورگر پر است','err'); throw e; }
+}
+function log(action, detail, type){
+  if(!type){
+    if(action.includes('ذخیره')) type='save';
+    else if(action.includes('ایجاد')) type='create';
+    else if(action.includes('حذف')) type='delete';
+    else if(action.includes('بک‌آپ')) type='backup';
+    else if(action.includes('بازگردانی')) type='restore';
+    else type='other';
+  }
+  db.logs.push({ts:new Date().toISOString(), action, type, detail});
+  if(db.logs.length > 500) db.logs = db.logs.slice(-400);
+  saveDB();
+}
+
+/* ===== THEME ===== */
+const PRESETS = {
+  default:{name:'شیشه‌ای',icon:'💎',desc:'گوشه‌های گرد، بلور متوسط'},
+  material:{name:'متریال',icon:'🎨',desc:'گوشه‌های تیز، سایه‌های چندلایه'},
+  liquid:{name:'لکوید',icon:'🍎',desc:'بسیار گرد، بلور بالا'},
+  win11:{name:'ویندوز ۱۱',icon:'🪟',desc:'Mica، تیره‌روشن'}
+};
+const COLORS = {
+  cyan:{name:'فیروزه‌ای',c1:'#22d3ee',c2:'#a855f7'}, blue:{name:'آبی',c1:'#3b82f6',c2:'#6366f1'},
+  purple:{name:'بنفش',c1:'#a855f7',c2:'#d946ef'}, green:{name:'سبز',c1:'#10b981',c2:'#22c55e'},
+  orange:{name:'نارنجی',c1:'#f97316',c2:'#f59e0b'}, pink:{name:'صورتی',c1:'#ec4899',c2:'#f472b6'},
+  red:{name:'قرمز',c1:'#ef4444',c2:'#dc2626'}, teal:{name:'فیروزه‌ای تیره',c1:'#14b8a6',c2:'#0d9488'},
+  amber:{name:'کهربایی',c1:'#f59e0b',c2:'#d97706'}, dracula:{name:'دراکولا',c1:'#bd93f9',c2:'#ff79c6'},
+  monokai:{name:'مونوکای',c1:'#a6e22e',c2:'#f92672'}, nord:{name:'نورد',c1:'#88c0d0',c2:'#81a1c1'},
+  tokyo:{name:'توکیو',c1:'#7aa2f7',c2:'#bb9af7'}
+};
+function applyTheme(t){ document.documentElement.dataset.theme=t; const b=document.getElementById('themeBtn'); if(b) b.textContent = t==='dark'?'☀️':'🌙'; localStorage.setItem(THEME_KEY, t); }
+function applyPreset(p){ document.documentElement.dataset.preset=p; localStorage.setItem(PRESET_KEY, p); renderPresetGrid(); }
+function applyColor(c){ document.documentElement.dataset.color=c; localStorage.setItem(COLOR_KEY, c); renderColorGrid(); }
+applyTheme(localStorage.getItem(THEME_KEY)||'dark');
+document.documentElement.dataset.preset = localStorage.getItem(PRESET_KEY)||'default';
+document.documentElement.dataset.color = localStorage.getItem(COLOR_KEY)||'cyan';
+
+function renderPresetGrid(){
+  const cur = document.documentElement.dataset.preset;
+  const el = document.getElementById('presetGrid');
+  if(!el) return;
+  el.innerHTML = Object.entries(PRESETS).map(([k,v]) => `<button class="theme-cell${k===cur?' active':''}" data-preset="${k}" title="${v.desc}"><span class="tc-icon">${v.icon}</span><div class="tc-name">${v.name}</div></button>`).join('');
+  el.querySelectorAll('.theme-cell').forEach(b => b.onclick = () => applyPreset(b.dataset.preset));
+}
+function renderColorGrid(){
+  const cur = document.documentElement.dataset.color;
+  const el = document.getElementById('colorGrid');
+  if(!el) return;
+  el.innerHTML = Object.entries(COLORS).map(([k,v]) => `<button class="color-cell${k===cur?' active':''}" data-color="${k}" style="background:linear-gradient(135deg,${v.c1},${v.c2})" title="${v.name}"></button>`).join('');
+  el.querySelectorAll('.color-cell').forEach(b => b.onclick = () => applyColor(b.dataset.color));
+}
+
+/* ===== DROPDOWN (mutual close + backdrop) ===== */
+const ddBackdropEl = document.getElementById('ddBackdrop');
+function showDDBackdrop(){ if(ddBackdropEl){ ddBackdropEl.classList.add('show'); ddBackdropEl.onclick = () => { document.querySelectorAll('.dd.open').forEach(el => { if(el._ddInstance) el._ddInstance.close(); }); }; } }
+function hideDDBackdrop(){ if(ddBackdropEl) ddBackdropEl.classList.remove('show'); }
+
+class Dropdown {
+  constructor(el, opts={}){
+    this.el = el; this.opts = opts; this.value = ''; this.items = [];
+    el._ddInstance = this;
+    this._build();
+  }
+  _build(){
+    this.el.classList.add('dd');
+    this.el.innerHTML = `<button class="dd-trigger" type="button"><span class="placeholder">${escapeHtml(this.opts.placeholder||'انتخاب کنید')}</span><i class="ph ph-caret-down chev"></i></button><div class="dd-panel"></div>`;
+    this.trigger = this.el.querySelector('.dd-trigger');
+    this.panel = this.el.querySelector('.dd-panel');
+    this.trigger.onclick = (e) => { e.stopPropagation(); if(this.el.classList.contains('open')) this.close(); else this.open(); };
+    document.addEventListener('click', (e) => { if(!this.el.contains(e.target)) this.close(); });
+  }
+  setItems(items){ this.items = items; this._render(); }
+  _render(){
+    if(!this.items.length){ this.panel.innerHTML = '<div class="dd-item empty">موردی موجود نیست</div>'; return; }
+    this.panel.innerHTML = this.items.map((it,i) => {
+      const num = faNum(i+1);
+      const meta = this.opts.renderItem ? this.opts.renderItem(it,i) : {ttl: it.label || it.value};
+      const active = it.value === this.value ? ' active' : '';
+      const badge = meta.badge ? `<span class="bg${meta.badgeNew?' new':''}">${escapeHtml(meta.badge)}</span>` : '';
+      const date = meta.date ? `<span class="dt">${escapeHtml(meta.date)}</span>` : '';
+      return `<div class="dd-item${active}" data-val="${escapeHtml(it.value)}"><span class="num">${num}</span><span class="ttl">${escapeHtml(meta.ttl||it.value)}</span>${date}${badge}</div>`;
+    }).join('');
+    this.panel.querySelectorAll('.dd-item:not(.empty)').forEach(row => {
+      row.onclick = () => { this.setValue(row.dataset.val, true); this.close(); };
     });
-</script>
-
-<script type="module">
-    import * as THREE from '/js/three.module.js';
-
-    function createBumpTexture(label) {
-        const c = document.createElement('canvas');
-        c.width = 1024; c.height = 1024;
-        const cx = c.getContext('2d');
-        cx.fillStyle = '#000000';
-        cx.fillRect(0, 0, 1024, 1024);
-        cx.shadowBlur = 15;
-        cx.shadowColor = '#ffffff';
-        cx.fillStyle = '#ffffff';
-        const isQR = (label === 'QR' || label === '');
-        if (!isQR) {
-            cx.font = 'bold 200px "B Yekan", Tahoma, sans-serif';
-            cx.textAlign = 'center';
-            cx.textBaseline = 'middle';
-            for (let i = 0; i < 3; i++) cx.fillText(label, 512, 512);
-        } else {
-            const size = 400, offset = (1024 - size) / 2;
-            const blocks = 8, blockSize = size / blocks;
-            for (let i = 0; i < blocks; i++)
-                for (let j = 0; j < blocks; j++)
-                    if (Math.random() > 0.35)
-                        cx.fillRect(offset + i * blockSize, offset + j * blockSize, blockSize, blockSize);
-            cx.fillRect(offset, offset, blockSize * 2.5, blockSize * 2.5);
-            cx.fillRect(offset + size - blockSize * 2.5, offset, blockSize * 2.5, blockSize * 2.5);
-            cx.fillRect(offset, offset + size - blockSize * 2.5, blockSize * 2.5, blockSize * 2.5);
-        }
-        return new THREE.CanvasTexture(c);
+  }
+  setValue(v, fromUser=false){
+    this.value = v;
+    const found = this.items.find(x => x.value === v);
+    const sel = this.trigger.querySelector('.selected');
+    const ph = this.trigger.querySelector('.placeholder');
+    if(found){
+      if(!sel){ if(ph) ph.outerHTML = `<span class="selected"><span class="nm"></span></span>`; }
+      const nm = this.trigger.querySelector('.nm');
+      if(nm) nm.textContent = found.label || found.value;
+    } else {
+      if(sel) sel.outerHTML = `<span class="placeholder">${escapeHtml(this.opts.placeholder||'انتخاب کنید')}</span>`;
     }
+    this._render();
+    if(this.opts.onSelect) this.opts.onSelect(v, found, fromUser);
+  }
+  getValue(){ return this.value; }
+  open(){ 
+    // close all other dropdowns
+    document.querySelectorAll('.dd.open').forEach(el => {
+      if(el._ddInstance && el._ddInstance !== this) el._ddInstance.close();
+    });
+    this.el.classList.add('open'); 
+    this.trigger.classList.add('open'); 
+    showDDBackdrop();
+  }
+  close(){ 
+    this.el.classList.remove('open'); 
+    this.trigger.classList.remove('open');
+    if(!document.querySelector('.dd.open')) hideDDBackdrop();
+  }
+}
 
-    function init3DCoin() {
-        const container = document.getElementById('coin-3d-container');
-        if (!container) return;
+const itemDD = new Dropdown(document.getElementById('itemDD'), {placeholder:'انتخاب آیتم', onSelect:()=>{ try{updateEntryPreview();}catch(e){} }});
+const catDD = new Dropdown(document.getElementById('catDD'), {placeholder:'انتخاب نوع'});
+const iconItemDD = new Dropdown(document.getElementById('iconItemDD'), {placeholder:'آیتم را انتخاب کنید'});
 
-        const p = window.coinParams;
+function refreshItemDD(){
+  const list = Object.values(db.items).map(it => {
+    const last = it.versions && it.versions.length ? it.versions[it.versions.length-1].ts : it.createdAt;
+    return {value:it.name, label:it.name, meta:{ttl:it.name, badge: it.versions && it.versions.length ? faNum(it.versions.length)+' نسخه':'جدید', badgeNew: !(it.versions && it.versions.length), date: jDateShort(last)}};
+  });
+  itemDD.setItems(list);
+  iconItemDD.setItems(list);
+}
+function refreshCatDD(){ catDD.setItems(db.categories.map(c => ({value:c,label:c}))); }
 
-        const scene    = new THREE.Scene();
-        const camera   = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 100);
-        camera.position.z = 12;
-
-        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 2.5;
-        container.appendChild(renderer.domElement);
-
-        const coinGroup = new THREE.Group();
-
-        const rimGeometry = new THREE.TorusGeometry(3.5, 0.15, 32, 100);
-        const rimMaterial = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 1.0, roughness: 0.15 });
-        coinGroup.add(new THREE.Mesh(rimGeometry, rimMaterial));
-
-        const bodyGeometry = new THREE.CylinderGeometry(3.45, 3.45, 0.3, 64);
-        let silverMat = new THREE.MeshStandardMaterial({
-            color: 0xffffff, metalness: 1.0, roughness: 0.2,
-            bumpMap: createBumpTexture(p.labelFront), bumpScale: p.bumpFront
-        });
-        let goldMat = new THREE.MeshStandardMaterial({
-            color: 0xffd700, metalness: 1.0, roughness: 0.2,
-            bumpMap: createBumpTexture('QR'),
-            bumpScale: p.bumpBack
-        });
-        const edgeMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 1.0, roughness: 0.2 });
-        const body = new THREE.Mesh(bodyGeometry, [edgeMat, silverMat, goldMat]);
-        body.rotation.x = Math.PI / 2;
-        coinGroup.add(body);
-        scene.add(coinGroup);
-
-        const ambientLight = new THREE.AmbientLight(0xffffff, p.ambientInt);
-        scene.add(ambientLight);
-
-        const lightDefs = [
-            { color: p.lightColor,  intensity: p.plightInt, pos: [5,  5,  8] },
-            { color: p.lightColor2, intensity: 2,            pos: [-5,-5,  5] },
-            { color: 0xffffff,      intensity: 1.5,          pos: [0,  0, -8] },
-            { color: 0xffeedd,      intensity: 10,           pos: [0, -4,  4] },
-            { color: 0xffe055,      intensity: 4,            pos: [4, 10,  0] },
-            { color: 0xffffff,      intensity: 10,           pos: [-4, 0,  0] },
-        ];
-        let pointLights = [];
-
-        function rebuildLights() {
-            pointLights.forEach(l => scene.remove(l));
-            pointLights = [];
-            const count = Math.min(p.lightCount, lightDefs.length);
-            for (let i = 0; i < count; i++) {
-                const def = lightDefs[i];
-                let col = i === 0 ? p.lightColor : i === 1 ? p.lightColor2 : def.color;
-                const pl = new THREE.PointLight(col, i === 0 ? p.plightInt : def.intensity, 50);
-                pl.position.set(...def.pos);
-                scene.add(pl);
-                pointLights.push(pl);
-            }
-        }
-        rebuildLights();
-
-        let isDragging = false, previousX = 0, velocityY = 0;
-        container.addEventListener('mousedown', (e) => { isDragging = true; previousX = e.offsetX; });
-        container.addEventListener('mousemove', (e) => {
-            if (isDragging) {
-                velocityY = (e.offsetX - previousX) * 0.01;
-                coinGroup.rotation.y += velocityY;
-                previousX = e.offsetX;
-            }
-        });
-        window.addEventListener('mouseup', () => isDragging = false);
-        container.addEventListener('touchstart', (e) => { isDragging = true; previousX = e.touches[0].clientX; }, { passive: true });
-        container.addEventListener('touchmove', (e) => {
-            if (isDragging) {
-                velocityY = (e.touches[0].clientX - previousX) * 0.01;
-                coinGroup.rotation.y += velocityY;
-                previousX = e.touches[0].clientX;
-            }
-        }, { passive: true });
-        window.addEventListener('touchend', () => isDragging = false);
-
-        let flipTargetY = null;
-        let flipStartY  = null;
-        let flipProgress = 1;
-
-        function animate() {
-            requestAnimationFrame(animate);
-
-            ambientLight.intensity = p.ambientInt;
-            if (pointLights[0]) pointLights[0].intensity = p.plightInt;
-            silverMat.bumpScale = p.bumpFront;
-            goldMat.bumpScale   = p.bumpBack;
-
-            if (p.flipTo !== null) {
-                const cur = coinGroup.rotation.y;
-                let target;
-                if (p.flipTo === 'front') {
-                    target = Math.round(cur / (Math.PI * 2)) * Math.PI * 2;
-                } else {
-                    target = Math.round((cur - Math.PI) / (Math.PI * 2)) * Math.PI * 2 + Math.PI;
-                }
-                flipStartY   = cur;
-                flipTargetY  = target;
-                flipProgress = 0;
-                p.flipTo     = null;
-            }
-
-            if (flipProgress < 1 && flipTargetY !== null) {
-                flipProgress = Math.min(flipProgress + 0.04, 1);
-                const t = flipProgress < 0.5
-                    ? 4 * flipProgress ** 3
-                    : 1 - Math.pow(-2 * flipProgress + 2, 3) / 2;
-                coinGroup.rotation.y = flipStartY + (flipTargetY - flipStartY) * t;
-            } else if (window.isStorm) {
-                coinGroup.rotation.y += 0.5;
-                coinGroup.rotation.x  = Math.random() * 0.2;
-                coinGroup.rotation.z  = Math.random() * 0.2;
-            } else if (flipProgress >= 1) {
-                coinGroup.rotation.x = THREE.MathUtils.lerp(coinGroup.rotation.x, 0, 0.1);
-                coinGroup.rotation.z = THREE.MathUtils.lerp(coinGroup.rotation.z, 0, 0.1);
-                if (!isDragging) {
-                    if (Math.abs(velocityY) > p.speed) {
-                        velocityY *= 0.95;
-                        coinGroup.rotation.y += velocityY;
-                    } else {
-                        coinGroup.rotation.y += p.speed;
-                    }
-                }
-            }
-
-            renderer.render(scene, camera);
-        }
-        animate();
-
-        window.addEventListener('resize', () => {
-            if (container.clientWidth > 0) {
-                camera.aspect = container.clientWidth / container.clientHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(container.clientWidth, container.clientHeight);
-            }
-        });
-    }
-
-    init3DCoin();
-</script>
-</body>
-</html>
-uctId][a.attributeName]) grouped[a.productId][a.attributeName] = new Set();
-        grouped[a.productId][a.attributeName].add(a.attributeValue);
-      });
-      for (let pid in grouped) {
-        const attrArray = [];
-        for (let name in grouped[pid]) {
-          attrArray.push({ name, options: Array.from(grouped[pid][name]) });
-        }
-        productAttributesMap.set(Number(pid), attrArray);
+/* ===== PARSE ===== */
+function parseItemCode(code){
+  const trimmed = (code||'').trim();
+  const re = /===NOAH-ARK-ITEM-v1===([\s\S]*?)===END-NOAH-ARK-ITEM===/;
+  const m = trimmed.match(re);
+  if(m){
+    let body = m[1].trim();
+    try{ return {ok:true, data:JSON.parse(body), raw:false}; }
+    catch(e){
+      const a = body.indexOf('{'), b = body.lastIndexOf('}');
+      if(a !== -1 && b > a){
+        try{ return {ok:true, data:JSON.parse(body.slice(a,b+1)), raw:false}; }catch(e2){}
       }
+      return {ok:false, error:'JSON نامعتبر: '+e.message};
     }
+  }
+  if(trimmed.startsWith('{') && trimmed.endsWith('}')){
+    try{ return {ok:true, data:JSON.parse(trimmed), raw:false}; }catch(e){}
+  }
+  return {ok:true, data:{title:'',category:'',subject:'',description:'کد خام',style:'',usage:'',params:{},dependencies:[],html:'',css:'',js:'',raw:trimmed}, raw:true};
+}
+function parseBulk(text){
+  const items = [];
+  const re = /===NOAH-ARK-ITEM-v1===([\s\S]*?)===END-NOAH-ARK-ITEM===/g;
+  let m;
+  while((m = re.exec(text)) !== null){
+    try{ items.push(JSON.parse(m[1].trim())); }catch(e){ console.warn('bulk parse:', e); }
+  }
+  if(items.length) return items;
+  try{ const arr = JSON.parse(text); if(Array.isArray(arr)) return arr; }catch(e){}
+  return [];
+}
+function detectCategory(data){
+  if(data && data.category && typeof data.category === 'string') return data.category.trim();
+  const text = [data?.title||'', data?.description||'', data?.style||'', data?.usage||''].join(' ').toLowerCase();
+  const rules = [{kw:['نمودار','chart','گراف','graph','pie','bar'],cat:'نمودار'},{kw:['فرم','form','input','ورودی'],cat:'فرم'},{kw:['بنر','banner','هدر','header','hero'],cat:'بنر'},{kw:['کارت','card','tile'],cat:'کارت'},{kw:['دکمه','button','btn'],cat:'دکمه'},{kw:['گالری','gallery','تصویر','image','slider'],cat:'گالری'},{kw:['تب','tab','ناوبری','nav','منو'],cat:'ناوبری'},{kw:['ابزارک','widget'],cat:'ابزارک'},{kw:['تعاملی','interactive'],cat:'تعاملی'},{kw:['استایل','style','theme'],cat:'استایل'},{kw:['لایه','layer','grid'],cat:'لایه'},{kw:['جدول','table','data'],cat:'کامپوننت'}];
+  for(const r of rules){ if(r.kw.some(k => text.includes(k))) return r.cat; }
+  return 'کامپوننت';
+}
+function detectSubject(data){
+  if(data && data.subject && typeof data.subject === 'string') return data.subject.trim();
+  const text = [data?.title||'', data?.description||'', data?.style||'', data?.usage||''].join(' ').toLowerCase();
+  const rules = [{kw:['نمودار','chart','graph','داده','data'],s:'فناوری'},{kw:['کشاورزی','دام','شیر','حیوان','plant','crop','farm'],s:'کشاورزی'},{kw:['سلامت','پزشک','بیمار','health','medical'],s:'سلامت'},{kw:['مالی','بانک','پرداخت','payment','bank','money'],s:'مالی'},{kw:['آموزش','درس','معلم','learn','course'],s:'آموزشی'},{kw:['بازی','game','سرگرم','fun'],s:'سرگرمی'},{kw:['موسیقی','music','صدا','audio','video'],s:'رسانه'},{kw:['هنر','art','طراحی','design'],s:'هنری'},{kw:['ابزار','tool','utility'],s:'ابزار'}];
+  for(const r of rules){ if(r.kw.some(k => text.includes(k))) return r.s; }
+  return 'عمومی';
+}
 
-    async function extractAttributes() {
-      const attrs = await executeDB('product_attributes', 'readonly', store => store.getAll());
-      allAttributes.clear();
-      attrs.forEach(a => {
-        if (!allAttributes.has(a.attributeName)) allAttributes.set(a.attributeName, new Set());
-        allAttributes.get(a.attributeName).add(a.attributeValue);
-      });
-      attributesCount = attrs.length;
-      document.getElementById('attributeCount').innerText = attributesCount.toLocaleString();
-      document.getElementById('totalAttributes').innerText = attributesCount.toLocaleString();
-      renderAttributeButtons();
-      renderSelectedAttributeChips();
+function buildInfoTable(d, extra={}){
+  const rows = [];
+  if(d.title) rows.push(['عنوان', escapeHtml(d.title)]);
+  if(d.category) rows.push(['نوع', escapeHtml(d.category)]);
+  if(d.subject) rows.push(['موضوع', escapeHtml(d.subject)]);
+  if(d.description) rows.push(['توضیح', escapeHtml(d.description)]);
+  if(d.style) rows.push(['استایل', escapeHtml(d.style)]);
+  if(d.usage) rows.push(['نحوه استفاده', escapeHtml(d.usage)]);
+  if(d.params && typeof d.params === 'object' && Object.keys(d.params).length){
+    const tags = Object.entries(d.params).map(([k,p])=>{ const t=p&&p.type?' ('+p.type+')':''; const def=p&&p.default!==undefined?' ['+p.default+']':''; return `<span class="tag">${escapeHtml(k)}${escapeHtml(t)}${escapeHtml(def)}</span>`; }).join('');
+    rows.push(['پارامترها', tags]);
+  }
+  if(d.dependencies && d.dependencies.length){
+    const deps = d.dependencies.map(x => `<span class="dep-status checking" data-dep-status="${escapeHtml(x)}"><span class="dot"></span>${escapeHtml(x)}</span>`).join('');
+    rows.push(['کتابخانه‌ها', deps]);
+  }
+  if(extra.raw) rows.push(['وضعیت','<span class="tag" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.3)">کد خام</span>']);
+  if(extra.version) rows.push(['نسخه', faNum(extra.version)]);
+  if(extra.date) rows.push(['تاریخ ثبت', escapeHtml(extra.date)]);
+  if(!rows.length) return '';
+  return `<div class="table-scroll"><table class="mini-table" id="infoTable">${rows.map(([k,v])=>`<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table></div>`;
+}
+function wireInfoTableClicks(){
+  const tbl = document.getElementById('infoTable');
+  if(!tbl) return;
+  tbl.querySelectorAll('tr').forEach(tr => {
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', (e) => {
+      if(e.target.closest('.dep-status')) return;
+      tr.classList.toggle('expanded');
+    });
+  });
+}
+async function checkDepStatuses(){
+  const els = document.querySelectorAll('[data-dep-status]');
+  for(const el of els){
+    const dep = el.dataset.depStatus;
+    const s = await getLibStatus(dep);
+    el.classList.remove('checking');
+    el.classList.add(s.status);
+    el.innerHTML = `<span class="dot"></span>${escapeHtml(dep)} — ${s.label}`;
+  }
+}
+
+function updateEntryPreview(){
+  const codeEl = document.getElementById('codeInput');
+  const box = document.getElementById('entryPreview');
+  if(!codeEl || !box) return;
+  const code = codeEl.value.trim();
+  if(!code){ box.innerHTML=''; return; }
+  if(!code.includes('===NOAH-ARK-ITEM-v1===') && !code.startsWith('{')){ box.innerHTML=''; return; }
+  const p = parseItemCode(code);
+  if(!p.ok){ box.innerHTML = `<div class="mini-table" style="padding:10px;color:var(--err);font-size:12px">خطا: ${escapeHtml(p.error)}</div>`; return; }
+  box.innerHTML = buildInfoTable(p.data,{raw:p.raw});
+  wireInfoTableClicks();
+  checkDepStatuses();
+  if(!catDD.getValue()){
+    const detected = detectCategory(p.data);
+    if(detected){ if(!db.categories.includes(detected)){ db.categories.push(detected); refreshCatDD(); } catDD.setValue(detected); }
+  }
+}
+
+/* ===== NAV SLIDER ===== */
+function updateNavSlider(){
+  const nav = document.getElementById('mobileNav');
+  const slider = document.getElementById('navSlider');
+  if(!nav || !slider) return;
+  const active = nav.querySelector('button.active');
+  if(!active) return;
+  const update = () => {
+    const navRect = nav.getBoundingClientRect();
+    const btnRect = active.getBoundingClientRect();
+    slider.style.left = (btnRect.left - navRect.left) + 'px';
+    slider.style.width = btnRect.width + 'px';
+    slider.classList.add('ready');
+  };
+  update();
+  setTimeout(update, 50);
+  setTimeout(update, 560);
+}
+
+function switchTab(name){
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-'+name));
+  $$('.mobile-nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  updateNavSlider();
+  try{
+    if(name === 'view') renderView();
+    if(name === 'about') { renderAbout(); updateAboutHeroStatic(); }
+  }catch(e){ console.warn(e); }
+}
+
+/* ===== VIEW ===== */
+let currentItem = null;
+let currentVerIdx = 0;
+
+function renderCarousel(){
+  const carousel = document.getElementById('itemCarousel');
+  if(!carousel) return;
+  const items = Object.values(db.items);
+  if(!items.length){ carousel.innerHTML = '<div class="empty" style="padding:14px;flex:1"><i class="ph ph-selection-all"></i>آیتمی نیست</div>'; return; }
+  carousel.innerHTML = items.map(it => {
+    let icon = '<i class="ph ph-cube"></i>';
+    const _ri = it.icon;
+    if(_ri && typeof _ri === 'string' && !/[{}<>]/.test(_ri)){
+      if(_ri.startsWith('data:image/')) icon = `<img src="${escapeHtml(_ri)}" alt="">`;
+      else if(/^[a-z0-9-]+$/i.test(_ri)) icon = `<i class="ph ph-${_ri}"></i>`;
     }
+    return `<button class="carousel-item${it.name===currentItem?' active':''}" data-name="${escapeHtml(it.name)}">
+      <div class="ci-icon">${icon}</div>
+      <div class="ci-label">${escapeHtml(it.name)}</div>
+      <div class="ci-badge">${it.versions.length ? faNum(it.versions.length)+' نسخه' : 'جدید'}</div>
+    </button>`;
+  }).join('');
+  carousel.querySelectorAll('.carousel-item').forEach(b => {
+    b.onclick = () => {
+      currentItem = b.dataset.name;
+      currentVerIdx = Math.max(0, (db.items[currentItem].versions||[]).length - 1);
+      renderCarousel();
+      renderView();
+      renderVersionSwitcher();
+    };
+  });
+  const active = carousel.querySelector('.carousel-item.active');
+  if(active) try{ active.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'}); }catch(e){}
+}
+function renderVersionSwitcher(){
+  const num = document.getElementById('verNum');
+  const of = document.getElementById('verOf');
+  const date = document.getElementById('verDate');
+  const prev = document.getElementById('verPrev');
+  const next = document.getElementById('verNext');
+  if(!num) return;
+  if(!currentItem || !db.items[currentItem]){ num.textContent='—'; of.textContent=''; date.textContent=''; prev.disabled=true; next.disabled=true; return; }
+  const item = db.items[currentItem];
+  const total = item.versions.length;
+  const v = item.versions[currentVerIdx];
+  if(!v) return;
+  num.textContent = 'نسخه '+faNum(v.version);
+  of.textContent = 'از '+faNum(total);
+  date.textContent = jDateShort(v.ts);
+  prev.disabled = currentVerIdx >= total - 1;
+  next.disabled = currentVerIdx <= 0;
+}
 
-    function renderAttributeButtons() {
-      const container = document.getElementById('attributeFilterButtons');
-      container.innerHTML = '';
-      allAttributes.forEach((values, attr) => {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-sm';
-        btn.style.background = attributeFilters.has(attr) ? 'var(--accent-gold)' : 'rgba(0,0,0,0.3)';
-        btn.style.color = attributeFilters.has(attr) ? '#042d28' : 'white';
-        let icon = '🏷️';
-        if (attr.includes('رنگ')) icon = '🎨';
-        else if (attr.includes('سایز')) icon = '📏';
-        else if (attr.includes('جنس')) icon = '🧵';
-        btn.innerText = icon + ' ' + attr + ' (' + values.size + ')';
-        btn.onclick = () => openAttributeModal(attr);
-        container.appendChild(btn);
-      });
-    }
+async function buildPreviewSrcdoc(m, raw, code){
+  const html = m.html || (raw ? code : '') || '';
+  const css = m.css || '';
+  const js = (m.js || '').replace(/<\/script>/gi,'<\\/script>');
+  
+  const deps = [...(m.dependencies || [])].sort((a, b) => {
+    if (a.toLowerCase().includes('jquery')) return -1;
+    if (b.toLowerCase().includes('jquery')) return 1;
+    return 0;
+  });
 
-    function renderSelectedAttributeChips() {
-      const container = document.getElementById('selectedAttributeChips');
-      if (!container) return;
-      container.innerHTML = '';
-      const chips = [];
-      attributeFilters.forEach((values, attr) => {
-        values.forEach(val => {
-          chips.push({ attr, val });
-        });
-      });
-      const isMobile = window.innerWidth <= 768;
-      if (isMobile && chips.length > 3) {
-        const moreChip = document.createElement('span');
-        moreChip.className = 'more-chip';
-        moreChip.innerText = `+${chips.length} فیلتر`;
-        moreChip.onclick = () => showAllFiltersModal();
-        container.appendChild(moreChip);
+  let libStyles = '';
+  let libScripts = '';
+  
+  // AG Grid special case: add CSS when dependency detected
+  const usesAgGrid = deps.some(d => d.toLowerCase().includes('ag grid') || d.toLowerCase().includes('ag-grid'));
+  if (usesAgGrid) {
+    libStyles += `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-grid.css">\n`;
+    libStyles += `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-theme-quartz-dark.css">\n`;
+  }
+  
+  for(const dep of deps){
+    const info = await getLibContent(dep);
+    if(info.ok){
+      if(info.url) {
+        if(info.type === 'css') libStyles += `<link rel="stylesheet" href="${info.url}">\n`;
+        else libScripts += `<script src="${info.url}"><\/script>\n`;
       } else {
-        chips.forEach(({ attr, val }) => {
-          const chip = document.createElement('span');
-          chip.className = 'filter-chip';
-          chip.innerHTML = `${attr}: ${val} <span class="remove" onclick="event.stopPropagation(); removeAttributeFilter('${attr}','${val}')">×</span>`;
-          chip.onclick = (e) => { if (e.target === chip || !e.target.classList.contains('remove')) removeAttributeFilter(attr, val); };
-          container.appendChild(chip);
-        });
+        if(info.type === 'css') libStyles += `<style data-lib="${escapeHtml(dep)}">${info.content}</style>\n`;
+        else libScripts += `<script data-lib="${escapeHtml(dep)}">${info.content}<\/script>\n`;
       }
     }
+  }
+  
+  return `<!DOCTYPE html><html lang="fa" dir="rtl"><head>
+<meta charset="UTF-8">
+<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web"><\/script>
+${libStyles}
+<style>html,body{margin:0;padding:0;font-family:'Vazirmatn',system-ui,sans-serif;background:transparent;color:#e9f0f8;min-height:100%}${css}</style></head><body>${html}${libScripts}<script>${js}<\/script></body></html>`;
+}
 
-    function showAllFiltersModal() {
-      const list = document.getElementById('allFiltersList');
-      list.innerHTML = '';
-      attributeFilters.forEach((values, attr) => {
-        values.forEach(val => {
-          const chip = document.createElement('span');
-          chip.className = 'filter-chip';
-          chip.innerHTML = `${attr}: ${val} <span class="remove" onclick="removeAttributeFilter('${attr}','${val}'); event.stopPropagation();">×</span>`;
-          list.appendChild(chip);
-        });
-      });
-      document.getElementById('allFiltersModal').style.display = 'flex';
-    }
+async function renderView(){
+  renderCarousel();
+  renderVersionSwitcher();
+  const area = document.getElementById('viewArea');
+  if(!area) return;
+  if(!currentItem || !db.items[currentItem] || !db.items[currentItem].versions.length){
+    area.innerHTML = `<div class="glass card"><div class="empty"><i class="ph ph-selection-all"></i>یک آیتم انتخاب کنید</div></div>`;
+    return;
+  }
+  const item = db.items[currentItem];
+  const v = item.versions[currentVerIdx];
+  if(!v) return;
+  const m = v.meta || {};
+  const srcdoc = await buildPreviewSrcdoc(m, v.raw, v.code);
+  const infoTable = buildInfoTable(m, {version:v.version, date:jDate(v.ts), raw:v.raw});
+  const deps = m.dependencies || [];
 
-    window.closeAllFiltersModal = () => document.getElementById('allFiltersModal').style.display = 'none';
-
-    function openAttributeModal(attr) {
-      currentAttribute = attr;
-      tempSelectedValues = new Set(attributeFilters.get(attr) || []);
-      const values = Array.from(allAttributes.get(attr) || []);
-      const container = document.getElementById('attributeOptions');
-      container.innerHTML = '';
-      values.forEach(v => {
-        const opt = document.createElement('span');
-        opt.className = 'attr-option' + (tempSelectedValues.has(v) ? ' selected' : '');
-        opt.innerText = v;
-        opt.onclick = () => {
-          if (tempSelectedValues.has(v)) {
-            tempSelectedValues.delete(v);
-            opt.classList.remove('selected');
-          } else {
-            tempSelectedValues.add(v);
-            opt.classList.add('selected');
-          }
-        };
-        container.appendChild(opt);
-      });
-      document.getElementById('attributeModalTitle').innerText = 'انتخاب مقادیر ' + attr;
-      document.getElementById('attributeModal').style.display = 'flex';
-    }
-
-    function closeAttributeModal() {
-      document.getElementById('attributeModal').style.display = 'none';
-      currentAttribute = null;
-    }
-
-    function applyAttributeSelection() {
-      if (currentAttribute) {
-        if (tempSelectedValues.size) {
-          attributeFilters.set(currentAttribute, new Set(tempSelectedValues));
-        } else {
-          attributeFilters.delete(currentAttribute);
-        }
-        renderAttributeButtons();
-        renderSelectedAttributeChips();
-        applyFilters();
-      }
-      closeAttributeModal();
-    }
-
-    window.removeAttributeFilter = (attr, val) => {
-      if (attributeFilters.has(attr)) {
-        attributeFilters.get(attr).delete(val);
-        if (attributeFilters.get(attr).size === 0) attributeFilters.delete(attr);
-      }
-      renderAttributeButtons();
-      renderSelectedAttributeChips();
-      applyFilters();
-    };
-
-    function clearAllAttributeFilters() {
-      attributeFilters.clear();
-      renderAttributeButtons();
-      renderSelectedAttributeChips();
-      applyFilters();
-    }
-
-    function updateStats() {
-      document.getElementById('totalProducts').innerText = allProducts.length.toLocaleString();
-      document.getElementById('indexedProducts').innerText = indexedCount.toLocaleString();
-      document.getElementById('pendingChanges').innerText = syncQueue.length;
-    }
-
-    function updateCategoryFilter() {
-      const container = document.getElementById('categoryFilterContainer');
-      if (!container) return;
-      
-      // استخراج همه‌ی دسته‌های منحصربه‌فرد از محصولات
-      const allCats = new Set();
-      allProducts.forEach(p => {
-        if (p.categories && Array.isArray(p.categories)) {
-          p.categories.forEach(c => allCats.add(c));
-        }
-      });
-      
-      const sortedCats = Array.from(allCats).sort((a, b) => a.localeCompare(b, 'fa'));
-      container.innerHTML = '';
-      
-      sortedCats.forEach(cat => {
-        const label = document.createElement('label');
-        label.style.margin = '0.2rem';
-        label.style.display = 'inline-flex';
-        label.style.alignItems = 'center';
-        label.style.gap = '0.2rem';
-        label.style.background = 'rgba(255,255,255,0.1)';
-        label.style.padding = '0.2rem 0.6rem';
-        label.style.borderRadius = '2rem';
-        label.style.fontSize = '0.7rem';
-        label.style.cursor = 'pointer';
-        
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = cat;
-        cb.checked = selectedCategories.has(cat);
-        cb.style.marginLeft = '0.2rem';
-        cb.onchange = (e) => {
-          if (e.target.checked) selectedCategories.add(cat);
-          else selectedCategories.delete(cat);
-          applyFilters(); // اعمال فیلتر با هر تغییر
-        };
-        
-        label.appendChild(cb);
-        label.appendChild(document.createTextNode(cat));
-        container.appendChild(label);
-      });
-    }
-
-    function clearCategoryFilters() {
-      selectedCategories.clear();
-      updateCategoryFilter();
-      applyFilters();
-    }
-
-    function selectAllCategories() {
-      document.querySelectorAll('#categoryFilterContainer input[type="checkbox"]').forEach(cb => {
-        cb.checked = true;
-        selectedCategories.add(cb.value);
-      });
-      applyFilters();
-    }
-
-    function sortProducts() {
-      filteredProducts.sort((a,b)=>{
-        let va = a[sortColumn] || '', vb = b[sortColumn] || '';
-        if (sortColumn==='date_modified') va = new Date(va), vb = new Date(vb);
-        if (sortColumn==='price'||sortColumn==='weight'||sortColumn==='price_per_gram') va=Number(va), vb=Number(vb);
-        if (sortDirection==='asc') return va>vb?1:-1;
-        else return va<vb?1:-1;
-      });
-    }
-
-    function displayProducts() {
-      const rowsPerPage = appConfig.rowsPerPage;
-      const start = (currentPage-1)*rowsPerPage;
-      const end = start+rowsPerPage;
-      const pageData = filteredProducts.slice(start,end);
-      const tbody = document.getElementById('productsTableBody');
-      tbody.innerHTML = '';
-      pageData.forEach((p, idx) => {
-        const globalIdx = start+idx+1;
-        const checked = selectedProducts.has(p.id) ? 'checked' : '';
-        let row = '<tr>';
-        if (appConfig.visibleColumns.row) row += `<td>${globalIdx}</td>`;
-        if (appConfig.visibleColumns.select) row += `<td><input type="checkbox" class="row-select" data-id="${p.id}" ${checked} onchange="toggleProductSelect(${p.id},this.checked)"></td>`;
-        if (appConfig.visibleColumns.thumbnail) row += `<td><img src="${p.image||'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIxOCIgaGVpZ2h0PSIxOCIgcng9IjIiIHJ5PSIyIj48L3JlY3Q+PGNpcmNsZSBjeD0iOC41IiBjeT0iOC41IiByPSIxLjUiPjwvY2lyY2xlPjxwb2x5bGluZSBwb2ludHM9IjIxIDE1IDE2IDEwIDUgMjEiPjwvcG9seWxpbmU+PC9zdmc+'}" class="product-thumb"></td>`;
-        if (appConfig.visibleColumns.name) row += `<td><a href="#" onclick="showProductDetail(${p.id}); return false;" style="color:var(--accent-gold);">${p.name||'---'}</a></td>`;
-        if (appConfig.visibleColumns.date_modified) row += `<td>${p.date_modified?new Date(p.date_modified).toLocaleDateString('fa-IR'):'---'}</td>`;
-        if (appConfig.visibleColumns.weight) row += `<td>${p.weight?p.weight+'g':'---'}</td>`;
-        if (appConfig.visibleColumns.price_per_gram) row += `<td>${p.price_per_gram?Math.round(p.price_per_gram).toLocaleString():'---'}</td>`;
-        if (appConfig.visibleColumns.price) row += `<td>${p.price?p.price.toLocaleString():'---'}</td>`;
-        if (appConfig.visibleColumns.new_price) {
-          const newPrice = priceEdits.get(p.id)||'';
-          row += `<td><input type="number" class="price-input" id="newprice_${p.id}" value="${newPrice}" placeholder="جدید"> <button class="btn btn-sm" onclick="savePrice(${p.id})">💾</button></td>`;
-        }
-if (appConfig.visibleColumns.actions) row += `<td style="white-space:nowrap;">
-  <button class="btn btn-sm" title="شناسنامه محصول" onclick="showProductDetail(${p.id})">📋</button>
-  <button class="btn btn-sm" title="جزئیات سریع" onclick="showQuickDetail(${p.id})">🔍</button>
-  <button class="btn btn-sm" title="مشاهده در سایت" onclick="viewOnSite(${p.id})">🔗</button>
-</td>`;
-        row += '</tr>';
-        tbody.innerHTML += row;
-      });
-      document.getElementById('resultsCount').innerText = filteredProducts.length.toLocaleString();
-      renderPagination();
-    }
-
-    function renderPagination() {
-      const totalPages = Math.ceil(filteredProducts.length/appConfig.rowsPerPage);
-      let html = '';
-      if (currentPage > 1) html += `<button class="page-btn" onclick="changePage(${currentPage-1})">❮</button>`;
-      let startPage = Math.max(1, currentPage - 2);
-      let endPage = Math.min(totalPages, startPage + 4);
-      if (endPage - startPage < 4) startPage = Math.max(1, endPage - 4);
-      for (let i = startPage; i <= endPage; i++) {
-        html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="changePage(${i})">${i}</button>`;
-      }
-      if (currentPage < totalPages) html += `<button class="page-btn" onclick="changePage(${currentPage+1})">❯</button>`;
-      document.getElementById('pagination').innerHTML = html;
-    }
-
-    function changePage(p) { currentPage=p; displayProducts(); }
-
-    // ------------------------------------------------------------
-    // انتخاب محصولات
-    // ------------------------------------------------------------
-    window.toggleProductSelect = (id, checked) => { if(checked) selectedProducts.add(id); else selectedProducts.delete(id); };
-    window.selectAllFiltered = () => { filteredProducts.forEach(p=>selectedProducts.add(p.id)); displayProducts(); };
-    window.deselectAll = () => { selectedProducts.clear(); displayProducts(); };
-    window.toggleSelectAllRows = () => {
-      const allSelected = filteredProducts.every(p=>selectedProducts.has(p.id));
-      if(allSelected) filteredProducts.forEach(p=>selectedProducts.delete(p.id));
-      else filteredProducts.forEach(p=>selectedProducts.add(p.id));
-      displayProducts();
-    };
-
-    // ------------------------------------------------------------
-    // ذخیره قیمت و انیمیشن (اصلاح شده)
-    // ------------------------------------------------------------
-    async function savePrice(productId) {
-      try {
-        const input = document.getElementById(`newprice_${productId}`);
-        const newPrice = parseFloat(input.value);
-        if(isNaN(newPrice) || newPrice<0) { alert('قیمت نامعتبر'); return; }
-        const product = allProducts.find(p=>p.id===productId);
-        if(!product) return;
-        const oldPrice = product.price||0;
-        
-        // ذخیره در price_edits
-        await executeDB('price_edits', 'readwrite', store => store.put({ productId, newPrice, oldPrice, timestamp: new Date().toISOString(), synced: false, productName: product.name }));
-        
-        // ذخیره در تاریخچه
-        await executeDB('price_history', 'readwrite', store => store.add({ productId, oldPrice, newPrice, timestamp: new Date().toISOString() }));
-        
-        priceEdits.set(productId, newPrice);
-        
-        // اضافه به sync_queue
-        const queueItem = { productId, type: 'price_update', status: 'pending', timestamp: new Date().toISOString() };
-        const id = await executeDB('sync_queue', 'readwrite', store => store.add(queueItem));
-        syncQueue.push({ id, ...queueItem });
-        
-        // به‌روزرسانی نمایش
-        updateHeaderSyncCount();
-        animateCount(1, input);
-        displayProducts();
-        updateStats();
-        
-        // اگر تب همگام‌سازی فعال است، لیست را به‌روز کن
-        if (document.getElementById('syncTab').classList.contains('active')) {
-          renderSyncList();
-        }
-        
-        await log(`قیمت محصول ${product.name} به ${newPrice} تغییر یافت`, 'success');
-      } catch (error) {
-        console.error('خطا در ذخیره قیمت:', error);
-        alert('خطا در ذخیره قیمت. لطفاً کنسول را بررسی کنید.');
-      }
-    }
-
-    function animateCount(count, sourceElement) {
-      if (!sourceElement) return;
-      const rect = sourceElement.getBoundingClientRect();
-      const fly = document.createElement('div');
-      fly.innerText = '+' + count;
-      fly.className = 'float-counter';
-      fly.style.left = rect.left + 'px';
-      fly.style.top = rect.top + 'px';
-      fly.style.background = 'var(--accent-gold)';
-      fly.style.color = '#042d28';
-      fly.style.borderRadius = '50%';
-      fly.style.width = '30px';
-      fly.style.height = '30px';
-      fly.style.display = 'flex';
-      fly.style.alignItems = 'center';
-      fly.style.justifyContent = 'center';
-      fly.style.fontWeight = 'bold';
-      fly.style.boxShadow = '0 0 10px gold';
-      document.body.appendChild(fly);
-      setTimeout(()=>fly.remove(), 1000);
-    }
-
-    window.viewOnSite = function(productId) {
-      const product = allProducts.find(p=>p.id===productId);
-      if (product && product.permalink) window.open(product.permalink, '_blank');
-      else alert('لینک موجود نیست');
-    };
-
-    function updateHeaderSyncCount() {
-      const count = syncQueue.length;
-      const badge = document.getElementById('headerSyncCount');
-      badge.innerText = count;
-      if (count === 0) badge.classList.add('hide'); else badge.classList.remove('hide');
-    }
-
-    // ------------------------------------------------------------
-    // همگام‌سازی
-    // ------------------------------------------------------------
-    async function loadSyncQueue() {
-      syncQueue = await executeDB('sync_queue', 'readonly', store => store.getAll()) || [];
-      updateHeaderSyncCount();
-      renderSyncList();
-    }
-
-    function renderSyncList() {
-      const container = document.getElementById('syncList');
-      if(!syncQueue.length) { container.innerHTML = '<p>هیچ تغییری در صف نیست</p>'; return; }
-      let html = '';
-      syncQueue.forEach(item => {
-        const product = allProducts.find(p=>p.id===item.productId);
-        const checked = selectedSyncItems.has(item.id) ? 'checked' : '';
-        html += `<div style="display:flex; align-items:center; gap:0.3rem; padding:0.3rem; border-bottom:1px solid rgba(255,255,255,0.1);">
-          <input type="checkbox" class="sync-checkbox" data-id="${item.id}" ${checked} onchange="toggleSyncItem(${item.id}, this.checked)">
-          <span>${product?.name||'نامشخص'} (${item.productId})</span>
-          <span style="color:var(--accent-gold);">${priceEdits.get(item.productId)?.toLocaleString()} تومان</span>
-        </div>`;
-      });
-      container.innerHTML = html;
-      updateSyncStats();
-    }
-
-    window.toggleSyncItem = (id, checked) => { if(checked) selectedSyncItems.add(id); else selectedSyncItems.delete(id); };
-
-    function toggleSelectAllSync() {
-      const cb = document.getElementById('selectAllSync');
-      if(cb.checked) syncQueue.forEach(i=>selectedSyncItems.add(i.id));
-      else selectedSyncItems.clear();
-      renderSyncList();
-    }
-
-    function updateSyncStats() {
-      let inc=0, dec=0;
-      syncQueue.forEach(item=>{
-        const p = allProducts.find(p=>p.id===item.productId);
-        if(p) {
-          const old = p.price||0;
-          const newP = priceEdits.get(p.id)||0;
-          if(newP>old) inc++; else if(newP<old) dec++;
-        }
-      });
-      document.getElementById('syncTotal').innerText = syncQueue.length;
-      document.getElementById('syncIncrease').innerText = inc;
-      document.getElementById('syncDecrease').innerText = dec;
-      document.getElementById('syncSuccess').innerText = '0';
-    }
-
-    async function syncSelected() {
-      const items = syncQueue.filter(i=>selectedSyncItems.has(i.id));
-      await startSync(items);
-    }
-
-    async function syncAll() { await startSync(syncQueue); }
-
-    async function startSync(items) {
-      if(isSyncing) return;
-      if(!items.length) return alert('آیتمی انتخاب نشده');
-      isSyncing = true;
-      syncStopRequested = false;
-      document.getElementById('syncProgress').style.display = 'block';
-      let success=0, error=0;
-      for(let i=0;i<items.length;i++) {
-        if(syncStopRequested) break;
-        const item = items[i];
-        const product = allProducts.find(p=>p.id===item.productId);
-        if(!product) { error++; continue; }
-        try {
-          const newPrice = priceEdits.get(item.productId);
-          const url = `${appConfig.siteUrl}/wp-json/wc/v3/products/${item.productId}?consumer_key=${appConfig.consumerKey}&consumer_secret=${appConfig.consumerSecret}`;
-          const res = await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ regular_price: newPrice.toString() }) });
-          if(res.ok) {
-            success++;
-            await executeDB('price_edits', 'readwrite', store => store.put({ productId: item.productId, synced: true }));
-            await executeDB('sync_queue', 'readwrite', store => store.delete(item.id));
-            syncQueue = syncQueue.filter(q=>q.id!==item.id);
-            selectedSyncItems.delete(item.id);
-            logSync(`✅ ${product.name} همگام شد`, 'success');
-          } else { error++; logSync(`❌ ${product.name}`, 'error'); }
-        } catch(e) { error++; logSync(`❌ ${product.name}`, 'error'); }
-        const percent = Math.round(((i+1)/items.length)*100);
-        document.getElementById('syncProgressFill').style.width = percent+'%';
-        document.getElementById('syncProgressPercent').innerText = percent+'%';
-        document.getElementById('headerProgressFill').style.width = percent+'%';
-        document.getElementById('headerProgress').style.display = 'flex';
-        document.getElementById('headerProgressText').innerText = `${items.length - (i+1)} باقی`;
-      }
-      isSyncing = false;
-      document.getElementById('syncProgress').style.display = 'none';
-      document.getElementById('headerProgress').style.display = 'none';
-      renderSyncList();
-      updateHeaderSyncCount();
-      document.getElementById('syncSuccess').innerText = success;
-      updateStats();
-      log(`همگام‌سازی: ${success} موفق، ${error} ناموفق`, error===0?'success':'warning');
-    }
-
-    function stopSync() { syncStopRequested = true; }
-
-    function logSync(msg, type) {
-      const div = document.createElement('div');
-      div.innerText = `${new Date().toLocaleString('fa-IR')} ${msg}`;
-      div.style.color = type==='success'?'lightgreen':'pink';
-      document.getElementById('syncLog').prepend(div);
-      if(document.getElementById('syncLog').children.length>30) document.getElementById('syncLog').removeChild(document.getElementById('syncLog').lastChild);
-    }
-
-    async function deleteSelectedSync() {
-      if(!selectedSyncItems.size) return;
-      for(let id of selectedSyncItems) {
-        await executeDB('sync_queue', 'readwrite', store => store.delete(id));
-      }
-      syncQueue = syncQueue.filter(i=>!selectedSyncItems.has(i.id));
-      selectedSyncItems.clear();
-      renderSyncList();
-      updateHeaderSyncCount();
-    }
-
-    // ------------------------------------------------------------
-    // ایندکس
-    // ------------------------------------------------------------
-    async function startIndexing() {
-      if(isIndexing) return;
-      if (Date.now() >= licenseExpiry) { alert('لایسنس منقضی شده'); return; }
-      isIndexing = true;
-      isPaused = false;
-      document.getElementById('startIndexBtn').disabled = true;
-      document.getElementById('pauseIndexBtn').disabled = false;
-      document.getElementById('continueIndexBtn').style.display = 'none';
-      indexStartTime = Date.now();
-      startIndexTimer();
-      await logIndex('شروع ایندکس...', 'info');
-
-      try {
-        const testUrl = `${appConfig.siteUrl}/wp-json/wc/v3/products?per_page=1&consumer_key=${appConfig.consumerKey}&consumer_secret=${appConfig.consumerSecret}`;
-        const resp = await fetch(testUrl);
-        if(!resp.ok) throw new Error('خطا در اتصال');
-        totalSiteProducts = parseInt(resp.headers.get('X-WP-Total')) || 0;
-        document.getElementById('totalSiteProducts').innerText = totalSiteProducts.toLocaleString();
-      } catch(e) {
-        logIndex('خطا در دریافت تعداد کل', 'error');
-        isIndexing = false;
-        updateIndexButtons();
-        return;
-      }
-
-      let startPage = 1;
-      const incremental = document.getElementById('incrementalCheck').checked;
-      if(!incremental && indexedPages.size>0) {
-        const maxPage = Math.max(...Array.from(indexedPages));
-        if(maxPage * appConfig.perPage < totalSiteProducts) startPage = maxPage+1;
-        else {
-          logIndex('همه صفحات قبلاً ایندکس شده‌اند', 'info');
-          completeIndexing();
-          return;
-        }
-      }
-
-      const totalPages = Math.ceil(totalSiteProducts / appConfig.perPage);
-      for(let page=startPage; page<=totalPages; page++) {
-        if(!isIndexing || isPaused) {
-          if(isPaused) logIndex('ایندکس متوقف شد', 'warning');
-          break;
-        }
-        await indexPage(page);
-        const percent = Math.round((indexedCount/totalSiteProducts)*100);
-        document.getElementById('indexProgressFill').style.width = percent+'%';
-        document.getElementById('headerProgressFill').style.width = percent+'%';
-        document.getElementById('headerProgress').style.display = 'flex';
-        document.getElementById('headerProgressText').innerText = `${totalSiteProducts - indexedCount} باقی`;
-        await saveIndexState();
-      }
-      if(isIndexing && !isPaused) completeIndexing();
-    }
-
-    async function indexPage(page) {
-      try {
-        const url = `${appConfig.siteUrl}/wp-json/wc/v3/products?per_page=${appConfig.perPage}&page=${page}&consumer_key=${appConfig.consumerKey}&consumer_secret=${appConfig.consumerSecret}&_fields=id,name,slug,sku,price,regular_price,sale_price,date_created,date_modified,weight,dimensions,categories,attributes,images,permalink`;
-        const res = await fetch(url);
-        if(!res.ok) throw new Error(`HTTP ${res.status}`);
-        const products = await res.json();
-        if(!products.length) return;
-
-        for(const p of products) {
-          const weight = parseFloat(p.weight)||0;
-          const price = parseFloat(p.price)||0;
-          const pricePerGram = weight>0?price/weight:0;
-          const productData = {
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            sku: p.sku||'',
-            price,
-            regular_price: parseFloat(p.regular_price)||0,
-            sale_price: parseFloat(p.sale_price)||0,
-            date_created: p.date_created,
-            date_modified: p.date_modified,
-            weight,
-            dimensions: p.dimensions||null,
-            categories: p.categories ? p.categories.map(c => c.name) : [], // ذخیره همه‌ی دسته‌ها
-            image: p.images?.[0]?.src||'',
-            permalink: p.permalink||'',
-            price_per_gram: pricePerGram,
-            last_indexed: new Date().toISOString()
-          };
-          await executeDB('products', 'readwrite', store => store.put(productData));
-          
-          // ذخیره ویژگی‌ها
-          if(p.attributes) {
-            for(const attr of p.attributes) {
-              if(attr.options) {
-                for(const opt of attr.options) {
-                  await executeDB('product_attributes', 'readwrite', store => store.add({
-                    productId: p.id,
-                    attributeName: attr.name,
-                    attributeValue: opt,
-                    timestamp: new Date().toISOString()
-                  }));
-                }
-              }
-            }
-          }
-          indexedCount++;
-        }
-        indexedPages.add(page);
-        await executeDB('indexed_pages', 'readwrite', store => store.put({ page, timestamp: Date.now() }));
-        document.getElementById('indexedCountDisplay').innerText = indexedCount.toLocaleString();
-        document.getElementById('indexedProducts').innerText = indexedCount.toLocaleString();
-        logIndex(`صفحه ${page} ایندکس شد (${products.length} محصول)`, 'success');
-        
-        // به‌روزرسانی productAttributesMap برای محصولات جدید
-        await loadProductAttributesMap();
-      } catch(e) {
-        logIndex(`خطا در صفحه ${page}: ${e.message}`, 'error');
-        isIndexing = false;
-        updateIndexButtons();
-      }
-    }
-
-    function pauseIndexing() {
-      if(isIndexing && !isPaused) {
-        isPaused = true;
-        document.getElementById('pauseIndexBtn').disabled = true;
-        document.getElementById('continueIndexBtn').style.display = 'inline-block';
-        logIndex('ایندکس متوقف شد', 'warning');
-      }
-    }
-
-    function continueIndexing() {
-      if(isIndexing && isPaused) {
-        isPaused = false;
-        document.getElementById('pauseIndexBtn').disabled = false;
-        document.getElementById('continueIndexBtn').style.display = 'none';
-        logIndex('ادامه ایندکس...', 'info');
-        startIndexing();
-      }
-    }
-
-    async function resetIndexing() {
-      if(!confirm('ریست ایندکس؟')) return;
-      await executeDB('products', 'readwrite', store => store.clear());
-      await executeDB('product_attributes', 'readwrite', store => store.clear());
-      await executeDB('indexed_pages', 'readwrite', store => store.clear());
-      await executeDB('index_state', 'readwrite', store => store.clear());
-      indexedPages.clear();
-      indexedCount = 0;
-      totalSiteProducts = 0;
-      allProducts = [];
-      filteredProducts = [];
-      displayProducts();
-      updateStats();
-      logIndex('ایندکس ریست شد', 'warning');
-    }
-
-    function startIndexTimer() {
-      clearInterval(timerInterval);
-      timerInterval = setInterval(() => {
-        if(indexStartTime) {
-          const elapsed = Math.floor((Date.now()-indexStartTime)/1000);
-          const min = Math.floor(elapsed/60);
-          const sec = elapsed%60;
-          document.getElementById('indexTime').innerText = `${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
-        }
-      }, 1000);
-    }
-
-    function completeIndexing() {
-      isIndexing = false;
-      clearInterval(timerInterval);
-      updateIndexButtons();
-      document.getElementById('headerProgress').style.display = 'none';
-      logIndex('✅ ایندکس کامل شد', 'success');
-      loadInitialData();
-    }
-
-    function updateIndexButtons() {
-      document.getElementById('startIndexBtn').disabled = isIndexing;
-      document.getElementById('pauseIndexBtn').disabled = !isIndexing || isPaused;
-    }
-
-    async function logIndex(msg, type) {
-      const div = document.createElement('div');
-      div.innerText = `${new Date().toLocaleString('fa-IR')} ${msg}`;
-      div.style.color = type==='success'?'lightgreen':type==='error'?'pink':'white';
-      document.getElementById('indexLog').prepend(div);
-      if(document.getElementById('indexLog').children.length>30) document.getElementById('indexLog').removeChild(document.getElementById('indexLog').lastChild);
-      await log(msg, type);
-    }
-
-    async function saveIndexState() {
-      await executeDB('index_state', 'readwrite', store => store.put({
-        id: 'index_state',
-        indexedPages: Array.from(indexedPages),
-        indexedCount,
-        totalSiteProducts,
-        lastIndexed: new Date().toISOString()
-      }));
-    }
-
-    async function loadIndexState() {
-      const state = await executeDB('index_state', 'readonly', store => store.get('index_state'));
-      if(state) {
-        indexedPages = new Set(state.indexedPages||[]);
-        indexedCount = state.indexedCount||0;
-        totalSiteProducts = state.totalSiteProducts||0;
-        lastIndexTime = state.lastIndexed;
-        document.getElementById('totalSiteProducts').innerText = totalSiteProducts.toLocaleString();
-        document.getElementById('indexedCountDisplay').innerText = indexedCount.toLocaleString();
-      }
-    }
-
-    // ------------------------------------------------------------
-    // خروجی / ورودی با پیش‌نمایش
-    // ------------------------------------------------------------
-    let importDataCache = null;
-
-    async function exportData() {
-      const products = await executeDB('products', 'readonly', store => store.getAll());
-      const edits = await executeDB('price_edits', 'readonly', store => store.getAll());
-      const history = await executeDB('price_history', 'readonly', store => store.getAll());
-      const attrs = await executeDB('product_attributes', 'readonly', store => store.getAll());
-      const data = { products, edits, history, attrs, exportDate: new Date().toISOString() };
-      const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
-      a.click();
-    }
-
-    async function importData() {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json';
-      input.onchange = async e => {
-        const file = e.target.files[0];
-        if(!file) return;
-        const text = await file.text();
-        const data = JSON.parse(text);
-        importDataCache = data;
-        const preview = document.getElementById('importPreview');
-        preview.innerHTML = `
-          <p>محصولات: ${data.products?.length || 0}</p>
-          <p>ویرایش‌ها: ${data.edits?.length || 0}</p>
-          <p>تاریخچه: ${data.history?.length || 0}</p>
-          <p>ویژگی‌ها: ${data.attrs?.length || 0}</p>
-        `;
-        document.getElementById('importModal').style.display = 'flex';
-      };
-      input.click();
-    }
-
-    function closeImportModal() {
-      document.getElementById('importModal').style.display = 'none';
-      importDataCache = null;
-    }
-
-    async function confirmImport() {
-      if (!importDataCache) return;
-      const data = importDataCache;
-      if(data.products) {
-        await executeDB('products', 'readwrite', store => { store.clear(); data.products.forEach(p=>store.put(p)); });
-      }
-      if(data.edits) await executeDB('price_edits', 'readwrite', store => { store.clear(); data.edits.forEach(e=>store.put(e)); });
-      if(data.history) await executeDB('price_history', 'readwrite', store => { store.clear(); data.history.forEach(h=>store.put(h)); });
-      if(data.attrs) await executeDB('product_attributes', 'readwrite', store => { store.clear(); data.attrs.forEach(a=>store.put(a)); });
-      alert('بازیابی انجام شد');
-      closeImportModal();
-      loadInitialData();
-    }
-
-    // ------------------------------------------------------------
-    // فیلترها
-    // ------------------------------------------------------------
-    function applyFilters() {
-      const search = document.getElementById('searchInput').value.toLowerCase();
-      const hideNoWeight = document.getElementById('hideNoWeight').checked;
-      const hideNoPrice = document.getElementById('hideNoPrice').checked;
-
-      // خواندن مقادیر بازه قیمت هر گرم
-      const minVal = parseFloat(document.getElementById('minPrice').value);
-      const maxVal = parseFloat(document.getElementById('maxPrice').value);
-      const hasMin = !isNaN(minVal);
-      const hasMax = !isNaN(maxVal);
-
-      filteredProducts = allProducts.filter(p => {
-        // جستجو
-        if (search && !(p.name.toLowerCase().includes(search) || (p.sku && p.sku.toLowerCase().includes(search)))) return false;
-        
-        // فیلتر دسته‌بندی (چند انتخابی)
-        if (selectedCategories.size > 0) {
-          const productCats = p.categories || (p.category ? [p.category] : []);
-          if (!productCats.some(c => selectedCategories.has(c))) return false;
-        }
-
-        // عدم نمایش بی‌وزن
-        if (hideNoWeight && (!p.weight || p.weight <= 0)) return false;
-        // عدم نمایش بی‌قیمت
-        if (hideNoPrice && (!p.price || p.price <= 0)) return false;
-
-        // بازه قیمت هر گرم
-        const ppg = p.price_per_gram || 0;
-        if (hasMin && ppg < minVal) return false;
-        if (hasMax && ppg > maxVal) return false;
-
-        // فیلتر ویژگی‌ها
-        if (attributeFilters.size > 0) {
-          const productAttrs = productAttributesMap.get(p.id) || [];
-          for (let [attr, vals] of attributeFilters) {
-            const pa = productAttrs.find(a => a.name === attr);
-            if (!pa || !pa.options || !pa.options.some(opt => vals.has(opt))) return false;
-          }
-        }
-        return true;
-      });
-      currentPage = 1;
-      sortProducts();
-      displayProducts();
-    }
-
-    window.applyFilters = applyFilters;
-
-    // ------------------------------------------------------------
-    // نمایش جزییات محصول
-    // ------------------------------------------------------------
-   // ✅ جدید - showProductDetail با مودال کارت شناسنامه
-window.showProductDetail = function(id) {
-  const p = allProducts.find(p => p.id === id);
-  if (!p) return;
-
-  // ساخت لیست ویژگی‌ها
-  let attrsHtml = '';
-  if (p.attributes && p.attributes.length > 0) {
-    attrsHtml = `<div style="margin-top:1rem;">
-      <strong style="color:var(--accent-gold);">ویژگی‌ها:</strong>
-      <div style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.5rem;">
-        ${p.attributes.map(a =>
-          `<span style="background:var(--bg-main); border:1px solid var(--accent-gold); border-radius:20px; padding:2px 10px; font-size:0.85rem;">
-            <b>${a.name}:</b> ${Array.isArray(a.options) ? a.options.join('، ') : (a.option || '---')}
-          </span>`
-        ).join('')}
+  let depBlock = '';
+  if(deps.length){
+    depBlock = `<div class="glass card">
+      <div class="card-title"><i class="ph ph-package"></i>وضعیت کتابخانه‌ها</div>
+      <div id="depStatusList">${deps.map(d => `<span class="dep-status checking" data-dep-status="${escapeHtml(d)}"><span class="dot"></span>${escapeHtml(d)} — بررسی...</span>`).join('')}</div>
+      <div class="flex-row mt-8">
+        <button class="icon-action primary" onclick="openLibDownload()"><i class="ph ph-download-simple"></i><span class="lbl">بررسی / دانلود کتابخانه‌ها</span></button>
       </div>
     </div>`;
   }
 
-  // ساخت تصویر
-  const imgHtml = p.images && p.images[0]
-    ? `<img src="${p.images[0].src}" style="width:100%; max-height:220px; object-fit:contain; border-radius:10px; margin-bottom:1rem;" onerror="this.style.display='none'">`
-    : `<div style="width:100%; height:120px; background:var(--bg-main); border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:1rem; font-size:3rem;">📦</div>`;
+  // Preview full-width, no padding; buttons above info table
+  area.innerHTML = `
+    <div class="preview-full">
+      <div class="fw-label"><i class="ph ph-eye"></i>پیش‌نمایش</div>
+      <iframe sandbox="allow-scripts allow-same-origin" id="previewIframe"></iframe>
+    </div>
+    <div class="glass card">
+      <div class="flex-row">
+        <button class="icon-action" onclick="copyViewCode()" data-tip="کپی"><i class="ph ph-copy"></i></button>
+        <button class="icon-action" onclick="editViewItem()" data-tip="ویرایش"><i class="ph ph-pencil-simple"></i></button>
+        <button class="icon-action primary" onclick="openViewLivePreview()" data-tip="بزرگ"><i class="ph ph-eye"></i></button>
+        <button class="icon-action danger" onclick="deleteViewVersion()" data-tip="حذف"><i class="ph ph-trash"></i></button>
+      </div>
+    </div>
+    ${infoTable ? `<div class="glass card">${infoTable}</div>` : ''}
+    ${depBlock}`;
 
-  // محاسبه قیمت هر گرم
-  let pricePerGram = '---';
-  if (p.price && p.weight) {
-    pricePerGram = (parseFloat(p.price) / parseFloat(p.weight)).toFixed(0);
-    pricePerGram = parseInt(pricePerGram).toLocaleString('fa-IR') + ' ت/گ';
+  window._currentCode = v.code;
+  window._currentMeta = m;
+  window._currentRaw = v.raw;
+
+  const frame = document.getElementById('previewIframe');
+  if(frame){
+    frame.addEventListener('load', () => { try{ const h = frame.contentDocument.documentElement.scrollHeight; frame.style.height = Math.min(Math.max(h,240),1400)+'px'; }catch(e){} });
+    frame.srcdoc = srcdoc;
   }
-
-  document.getElementById('productModalContent').innerHTML = `
-    ${imgHtml}
-    <div style="border-right:4px solid var(--accent-gold); padding-right:1rem; margin-bottom:1rem;">
-      <h2 style="margin:0 0 0.3rem; color:var(--text-light); font-size:1.2rem;">${p.name || '---'}</h2>
-      <small style="color:#aaa;">SKU: ${p.sku || '---'} | ID: ${p.id}</small>
-    </div>
-
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem; margin-bottom:1rem;">
-      <div style="background:var(--bg-main); border-radius:10px; padding:0.8rem; text-align:center;">
-        <div style="font-size:0.75rem; color:#aaa; margin-bottom:0.3rem;">قیمت</div>
-        <div style="font-size:1.1rem; color:var(--accent-gold); font-weight:bold;">${p.price ? parseInt(p.price).toLocaleString('fa-IR') : '---'}</div>
-      </div>
-      <div style="background:var(--bg-main); border-radius:10px; padding:0.8rem; text-align:center;">
-        <div style="font-size:0.75rem; color:#aaa; margin-bottom:0.3rem;">وزن</div>
-        <div style="font-size:1.1rem; color:var(--accent-gold); font-weight:bold;">${p.weight ? p.weight + 'g' : '---'}</div>
-      </div>
-      <div style="background:var(--bg-main); border-radius:10px; padding:0.8rem; text-align:center;">
-        <div style="font-size:0.75rem; color:#aaa; margin-bottom:0.3rem;">قیمت هر گرم</div>
-        <div style="font-size:1rem; color:#7fdbff; font-weight:bold;">${pricePerGram}</div>
-      </div>
-      <div style="background:var(--bg-main); border-radius:10px; padding:0.8rem; text-align:center;">
-        <div style="font-size:0.75rem; color:#aaa; margin-bottom:0.3rem;">موجودی</div>
-        <div style="font-size:1rem; color:${p.stock_status === 'instock' ? '#2ecc71' : '#e74c3c'}; font-weight:bold;">${p.stock_status === 'instock' ? '✅ موجود' : '❌ ناموجود'}</div>
-      </div>
-    </div>
-
-    <div style="font-size:0.8rem; color:#999; margin-bottom:1rem;">
-      📅 آخرین بروزرسانی: ${p.date_modified ? new Date(p.date_modified).toLocaleString('fa-IR') : '---'}
-    </div>
-
-    ${attrsHtml}
-
-    <div style="margin-top:1.5rem; display:flex; gap:0.8rem; justify-content:center;">
-      <button class="btn btn-sm" style="background:var(--accent-gold); color:#000;" onclick="viewOnSite(${p.id})">🔗 مشاهده در سایت</button>
-      <button class="btn btn-sm" onclick="closeProductModal()">بستن</button>
-    </div>
-  `;
-
-  const modal = document.getElementById('productModal');
-  modal.style.display = 'flex';
-};
-
-// تابع جدید برای نمایش سریع (دکمه 🔍)
-window.showQuickDetail = function(id) {
-  const p = allProducts.find(p => p.id === id);
-  if (!p) return;
-  alert(`📦 ${p.name}\nSKU: ${p.sku||'---'}\nقیمت: ${p.price ? parseInt(p.price).toLocaleString('fa-IR') : '---'}\nوزن: ${p.weight || '---'}g`);
-};
-
-window.closeProductModal = function() {
-  document.getElementById('productModal').style.display = 'none';
-};
-
-    // ------------------------------------------------------------
-    // تنظیمات
-    // ------------------------------------------------------------
-    function saveSettings() {
-      appConfig.siteUrl = document.getElementById('siteUrl').value;
-      appConfig.consumerKey = document.getElementById('consumerKey').value;
-      appConfig.consumerSecret = document.getElementById('consumerSecret').value;
-      executeDB('app_config', 'readwrite', store => store.put({ key: 'config', value: appConfig }));
-      log('تنظیمات ذخیره شد', 'success');
-    }
-
-    function saveDisplaySettings() {
-      appConfig.rowsPerPage = parseInt(document.getElementById('rowsPerPage').value) || 10;
-      appConfig.showAttributesInPopup = document.getElementById('showAttrInPopup').checked;
-      document.querySelectorAll('#columnSelector input').forEach(cb => {
-        appConfig.visibleColumns[cb.dataset.col] = cb.checked;
-      });
-      appConfig.visibleAttributes = [];
-      document.querySelectorAll('#attributeSelector input:checked').forEach(cb => {
-        appConfig.visibleAttributes.push(cb.value);
-      });
-      displayProducts();
-      log('تنظیمات نمایش ذخیره شد', 'success');
-    }
-
-    function renderColumnSelector() {
-      const container = document.getElementById('columnSelector');
-      container.innerHTML = '';
-      for (let [key, label] of Object.entries({
-        row: 'ردیف', select: 'انتخاب', thumbnail: 'تصویر', name: 'نام',
-        date_modified: 'بروزرسانی', weight: 'وزن', price_per_gram: 'هر گرم',
-        price: 'قیمت', new_price: 'قیمت جدید', actions: 'عملیات'
-      })) {
-        const div = document.createElement('label');
-        div.style.margin = '0 0.5rem';
-        div.innerHTML = `<input type="checkbox" data-col="${key}" ${appConfig.visibleColumns[key]?'checked':''}> ${label}`;
-        container.appendChild(div);
-      }
-    }
-
-    function renderAttributeSelector() {
-      const container = document.getElementById('attributeSelector');
-      if (!container) return;
-      container.innerHTML = '';
-      allAttributes.forEach((_, attr) => {
-        const div = document.createElement('label');
-        div.style.margin = '0 0.5rem';
-        div.innerHTML = `<input type="checkbox" value="${attr}" ${(appConfig.visibleAttributes || []).includes(attr)?'checked':''}> ${attr}`;
-        container.appendChild(div);
-      });
-    }
-
-    async function testConnection() {
-      try {
-        const url = `${appConfig.siteUrl}/wp-json/wc/v3/products?per_page=1&consumer_key=${appConfig.consumerKey}&consumer_secret=${appConfig.consumerSecret}`;
-        const res = await fetch(url);
-        if (res.ok) alert('اتصال موفق');
-        else alert('خطا در اتصال');
-      } catch { alert('خطا'); }
-    }
-
-    // ------------------------------------------------------------
-    // منوی موبایل
-    // ------------------------------------------------------------
-    const menuOverlay = document.getElementById('menuOverlay');
-    document.getElementById('mobileMenuBtn').addEventListener('click', () => menuOverlay.classList.add('active'));
-    document.getElementById('menuClose').addEventListener('click', () => menuOverlay.classList.remove('active'));
-    document.querySelectorAll('.menu-item').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        document.getElementById(tab + 'Tab').classList.add('active');
-        menuOverlay.classList.remove('active');
-        if (tab === 'log') displayLogs();
-        if (tab === 'sync') renderSyncList();
-      });
-    });
-
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-        btn.classList.add('active');
-        document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
-        document.getElementById(btn.dataset.tab+'Tab').classList.add('active');
-        if(btn.dataset.tab==='log') displayLogs();
-        if(btn.dataset.tab==='sync') renderSyncList();
-      });
-    });
-
-    // ------------------------------------------------------------
-    // باز/بسته کردن پنل فیلترها
-    // ------------------------------------------------------------
-    let filterPanelVisible = false;
-    document.getElementById('filterToggleBtn').addEventListener('click', () => {
-      const panel = document.getElementById('filterPanel');
-      filterPanelVisible = !filterPanelVisible;
-      panel.classList.toggle('visible', filterPanelVisible);
-      document.getElementById('filterToggleBtn').innerText = filterPanelVisible ? '🔍 مخفی کردن فیلترها' : '🔍 نمایش فیلترها';
-    });
-
-    // ------------------------------------------------------------
-    // تم
-    // ------------------------------------------------------------
-    function setTheme(theme) {
-      if(theme==='dark') {
-        document.body.classList.remove('light-theme');
-      } else {
-        document.body.classList.add('light-theme');
-      }
-      appConfig.theme = theme;
-      localStorage.setItem('theme', theme);
-      document.querySelectorAll('#themeLight, #themeDark').forEach(el=>el.classList.remove('active'));
-      document.getElementById(theme==='light'?'themeLight':'themeDark').classList.add('active');
-    }
-    document.getElementById('themeLight').addEventListener('click', ()=>setTheme('light'));
-    document.getElementById('themeDark').addEventListener('click', ()=>setTheme('dark'));
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-
-    // ------------------------------------------------------------
-    // PWA نصب
-    // ------------------------------------------------------------
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-    });
-
-    window.showInstallPrompt = function() {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(() => deferredPrompt = null);
-      } else {
-        alert('برای نصب اپلیکیشن، از گزینه «افزودن به صفحه اصلی» در منوی مرورگر استفاده کنید.');
-      }
-    };
-
-    window.showHelp = function() {
-      alert(`راهنمای سریع:
-      - محصولات: لیست محصولات ایندکس شده، امکان ویرایش قیمت، فیلتر
-      - همگام‌سازی: ارسال تغییرات به سایت
-      - ایندکس: دریافت اطلاعات از سایت (مقاوم به قطع)
-      - لاگ: مشاهده رویدادها
-      - تنظیمات: پیکربندی اتصال و نمایش
-      - درباره: اطلاعات پروژه و لایسنس`);
-    };
-
-    // ------------------------------------------------------------
-    // اعمال تغییر دسته‌ای قیمت
-    // ------------------------------------------------------------
-    window.applyBatchPriceChange = async function() {
-      const type = document.getElementById('priceChangeType').value;
-      const value = parseFloat(document.getElementById('priceChangeValue').value);
-      const applyTo = document.getElementById('priceApplyType').value;
-      if(isNaN(value) || value===0) { alert('مقدار معتبر وارد کنید'); return; }
-      let products = [];
-      if(applyTo === 'all') products = allProducts;
-      else if(applyTo === 'filtered') products = filteredProducts;
-      else if(applyTo === 'selected') products = allProducts.filter(p=>selectedProducts.has(p.id));
-      if(products.length===0) { alert('محصولی یافت نشد'); return; }
-      if(!confirm(`اعمال تغییر بر ${products.length} محصول؟`)) return;
-      let count = 0;
-      for(const p of products) {
-        if(p.price>0) {
-          let newPrice;
-          if(type==='percent') {
-            newPrice = p.price * (1 + value/100);
-          } else {
-            if(p.weight<=0) continue;
-            newPrice = p.weight * value;
-          }
-          newPrice = Math.round(newPrice);
-          await executeDB('price_edits', 'readwrite', store => store.put({ productId: p.id, newPrice, oldPrice: p.price, timestamp: new Date().toISOString(), synced: false, productName: p.name }));
-          await executeDB('price_history', 'readwrite', store => store.add({ productId: p.id, oldPrice: p.price, newPrice, timestamp: new Date().toISOString() }));
-          priceEdits.set(p.id, newPrice);
-          const queueItem = { productId: p.id, type: 'price_update', status: 'pending', timestamp: new Date().toISOString() };
-          const id = await executeDB('sync_queue', 'readwrite', store => store.add(queueItem));
-          syncQueue.push({ id, ...queueItem });
-          count++;
-        }
-      }
-      updateHeaderSyncCount();
-      animateCount(count, event.target);
-      displayProducts();
-      updateStats();
-      if (document.getElementById('syncTab').classList.contains('active')) renderSyncList();
-      alert(`${count} محصول به صف همگام‌سازی اضافه شد`);
-    };
-
-    window.sortTable = (col) => {
-      if(sortColumn===col) sortDirection = sortDirection==='asc'?'desc':'asc';
-      else { sortColumn=col; sortDirection='asc'; }
-      sortProducts(); displayProducts();
-    };
-
-    window.changePage = changePage;
-
-    // ------------------------------------------------------------
-    // آماده‌سازی نهایی
-    // ------------------------------------------------------------
-    window.onload = async () => {
-      await initDatabase();
-      await loadIndexState();
-      await loadInitialData();
-      updateLicenseDisplay();
-      setInterval(updateLicenseDisplay, 60000);
-      document.getElementById('searchInput').addEventListener('input', applyFilters);
-      // توجه: المنت categoryFilter حذف شده، پس نیازی به رویداد change نیست.
-      document.getElementById('hideNoWeight').addEventListener('change', applyFilters);
-      document.getElementById('hideNoPrice').addEventListener('change', applyFilters);
-      document.getElementById('siteUrl').value = appConfig.siteUrl;
-      document.getElementById('consumerKey').value = appConfig.consumerKey;
-      document.getElementById('consumerSecret').value = appConfig.consumerSecret;
-      document.getElementById('rowsPerPage').value = appConfig.rowsPerPage;
-      document.getElementById('showAttrInPopup').checked = appConfig.showAttributesInPopup;
-    };
-
-    // expose functions
-    window.startIndexing = startIndexing;
-    window.pauseIndexing = pauseIndexing;
-    window.continueIndexing = continueIndexing;
-    window.resetIndexing = resetIndexing;
-    window.exportData = exportData;
-    window.importData = importData;
-    window.closeImportModal = closeImportModal;
-    window.confirmImport = confirmImport;
-    window.testConnection = testConnection;
-    window.saveSettings = saveSettings;
-    window.saveDisplaySettings = saveDisplaySettings;
-    window.activateLicense = activateLicense;
-    window.clearAllAttributeFilters = clearAllAttributeFilters;
-    window.filterLogs = filterLogs;
-    window.applyDeviceFilter = applyDeviceFilter;
-    window.toggleSelectAllSync = toggleSelectAllSync;
-    window.syncSelected = syncSelected;
-    window.syncAll = syncAll;
-    window.stopSync = stopSync;
-    window.deleteSelectedSync = deleteSelectedSync;
-    window.closeAttributeModal = closeAttributeModal;
-	window.selectAllAttrValues = function() {
-  document.querySelectorAll('#attributeOptions input[type="checkbox"]')
-    .forEach(cb => cb.checked = true);
-};
-
-window.clearAllAttrValues = function() {
-  document.querySelectorAll('#attributeOptions input[type="checkbox"]')
-    .forEach(cb => cb.checked = false);
-};
-
-window.applyAttributeFilter = function() {
-  if (!currentAttribute) return;
-  const checked = Array.from(
-    document.querySelectorAll('#attributeOptions input[type="checkbox"]:checked')
-  ).map(cb => cb.value);
-  
-  if (checked.length === 0) {
-    delete attributeFilters[currentAttribute];
-  } else {
-    attributeFilters[currentAttribute] = checked;
-  }
-  closeAttributeModal();
-  applyFilters();
-};
-    window.applyAttributeSelection = applyAttributeSelection;
-    window.savePrice = savePrice; // ensure it's globally available
-    window.clearCategoryFilters = clearCategoryFilters;
-    window.selectAllCategories = selectAllCategories;
-	// ==================== توابع سفارشات ====================
-async function loadOrders() {
-  showLoading();
-  try {
-    const status = document.getElementById('orderStatusFilter').value;
-    const dateFrom = document.getElementById('orderDateFrom').value;
-    const dateTo = document.getElementById('orderDateTo').value;
-    const search = document.getElementById('orderSearchInput').value;
-
-    let url = `${appConfig.siteUrl}/wp-json/wc/v3/orders?per_page=100&consumer_key=${appConfig.consumerKey}&consumer_secret=${appConfig.consumerSecret}`;
-    if (status) url += `&status=${status}`;
-    if (dateFrom) url += `&after=${dateFrom}T00:00:00`;
-    if (dateTo) url += `&before=${dateTo}T23:59:59`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
-
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('خطا در دریافت سفارشات');
-    const data = await res.json();
-
-    currentOrders = data.map(order => ({
-      id: order.id,
-      number: order.number,
-      customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim() || '---',
-      customer_email: order.billing.email,
-      customer_phone: order.billing.phone,
-      total: order.total,
-      status: order.status,
-      payment_method: order.payment_method_title,
-      date_created: order.date_created,
-      line_items: order.line_items,
-      shipping: order.shipping,
-      billing: order.billing,
-      customer_note: order.customer_note || ''
-    }));
-
-    applyOrderFilters(); // فیلتر و مرتب‌سازی اولیه
-    log(`تعداد ${currentOrders.length} سفارش بارگذاری شد`, 'info');
-  } catch (error) {
-    console.error(error);
-    alert('خطا در بارگذاری سفارشات');
-  } finally {
-    hideLoading();
-  }
+  wireInfoTableClicks();
+  checkDepStatuses();
 }
 
-function applyOrderFilters() {
-  const search = document.getElementById('orderSearchInput').value.toLowerCase();
-  filteredOrders = currentOrders.filter(o => {
-    if (search && !(o.number.toLowerCase().includes(search) ||
-                   o.customer_name.toLowerCase().includes(search) ||
-                   (o.customer_phone && o.customer_phone.includes(search)))) return false;
-    return true;
+window.copyViewCode = () => copyText(window._currentCode || '');
+window.editViewItem = () => {
+  if(!window._currentCode){ toast('کدی نیست','err'); return; }
+  itemDD.setValue(currentItem || '');
+  if(db.items[currentItem]){ catDD.setValue(db.items[currentItem].category||''); }
+  const ci = document.getElementById('codeInput');
+  if(ci){ ci.value = window._currentCode; updateEntryPreview(); }
+  switchTab('entry');
+  toast('✓ بارگذاری شد','ok');
+};
+window.openViewLivePreview = async () => {
+  if(!window._currentCode){ toast('کدی نیست','err'); return; }
+  const frame = document.getElementById('previewFrame');
+  frame.srcdoc = await buildPreviewSrcdoc(window._currentMeta||{}, window._currentRaw, window._currentCode);
+  document.getElementById('previewModal').classList.add('show');
+};
+window.deleteViewVersion = async () => {
+  if(!currentItem) return;
+  const item = db.items[currentItem];
+  const v = item.versions[currentVerIdx];
+  if(!v) return;
+  const ok = await confirmDialog('حذف نسخه', `«${currentItem} — نسخه ${v.version}» حذف شود؟`);
+  if(!ok) return;
+  item.versions.splice(currentVerIdx, 1);
+  item.versions.forEach((ver,i) => ver.version = i+1);
+  log('حذف نسخه', `${currentItem} — نسخه ${v.version}`,'delete');
+  saveDB();
+  currentVerIdx = Math.max(0, Math.min(currentVerIdx, item.versions.length - 1));
+  refreshItemDD();
+  renderView();
+  toast('✓ حذف شد','ok');
+};
+
+/* ===== HEALTH CHECK ===== */
+async function runHealthCheck() {
+  const btn = document.getElementById('runHealthCheckBtn');
+  const resBox = document.getElementById('healthCheckResult');
+  if(!btn || !resBox) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i><span>در حال اسکن...</span>';
+  resBox.innerHTML = '';
+
+  const allDeps = new Set();
+  Object.values(db.items).forEach(it => {
+    it.versions.forEach(v => {
+      if (v.meta && v.meta.dependencies) v.meta.dependencies.forEach(d => allDeps.add(d));
+    });
   });
-  sortOrders();
-  ordersCurrentPage = 1;
-  displayOrders();
-  updateOrderStats();
-}
 
-function sortOrders() {
-  filteredOrders.sort((a, b) => {
-    let va = a[orderSortColumn] || '';
-    let vb = b[orderSortColumn] || '';
-    if (orderSortColumn === 'date_created') {
-      va = new Date(va);
-      vb = new Date(vb);
-    } else if (orderSortColumn === 'total') {
-      va = parseFloat(va);
-      vb = parseFloat(vb);
-    }
-    if (orderSortDirection === 'asc') return va > vb ? 1 : -1;
-    else return va < vb ? 1 : -1;
-  });
-}
-
-function displayOrders() {
-  const tbody = document.getElementById('ordersTableBody');
-  const start = (ordersCurrentPage - 1) * ORDERS_PER_PAGE;
-  const pageData = filteredOrders.slice(start, start + ORDERS_PER_PAGE);
-  
-  if (!pageData.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:2rem;">هیچ سفارشی یافت نشد</td></tr>`;
-    document.getElementById('ordersCount').innerText = '0';
-    renderOrdersPagination();
+  if (allDeps.size === 0) {
+    resBox.innerHTML = '<div class="muted">هیچ کتابخانه‌ای در آیتم‌ها یافت نشد.</div>';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ph ph-activity"></i><span>شروع اسکن کامل سیستم</span>';
     return;
   }
 
-  tbody.innerHTML = pageData.map(order => {
-    const checked = selectedOrders.has(order.id) ? 'checked' : '';
-    const statusText = getOrderStatusText(order.status);
-    return `
-      <tr>
-        <td><input type="checkbox" data-id="${order.id}" ${checked} onchange="toggleOrderSelect(${order.id}, this.checked)"></td>
-        <td><strong style="color:var(--accent-gold);">#${order.number}</strong></td>
-        <td>
-          <div>${order.customer_name}</div>
-          <small style="opacity:0.7;">${order.customer_phone || ''}</small>
-        </td>
-        <td>${new Date(order.date_created).toLocaleDateString('fa-IR')}</td>
-        <td>${parseInt(order.total).toLocaleString('fa-IR')}</td>
-        <td><span class="status-badge status-${order.status}">${statusText}</span></td>
-        <td>${order.payment_method || '---'}</td>
-        <td>
-          <div class="action-buttons">
-            <button class="action-btn" onclick="viewOrderDetail(${order.id})" title="جزئیات">👁️</button>
-            <button class="action-btn" onclick="openChangeOrderStatus(${order.id})" title="تغییر وضعیت">✏️</button>
-            <button class="action-btn" onclick="printOrderInvoice(${order.id})" title="چاپ فاکتور">🖨️</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
-
-  document.getElementById('ordersCount').innerText = filteredOrders.length.toLocaleString();
-  renderOrdersPagination();
-}
-
-function renderOrdersPagination() {
-  const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
-  let html = '';
-  if (ordersCurrentPage > 1) html += `<button class="page-btn" onclick="changeOrdersPage(${ordersCurrentPage-1})">❮</button>`;
-  for (let i = Math.max(1, ordersCurrentPage-2); i <= Math.min(totalPages, ordersCurrentPage+2); i++) {
-    html += `<button class="page-btn ${i===ordersCurrentPage?'active':''}" onclick="changeOrdersPage(${i})">${i}</button>`;
+  let html = `<div class="table-scroll"><table class="data-table"><thead><tr><th>کتابخانه</th><th>وضعیت</th><th>منبع</th></tr></thead><tbody>`;
+  for (const dep of allDeps) {
+    const s = await getLibStatus(dep);
+    let label = s.status === 'green' ? 'در دسترس' : 'نامشخص';
+    let color = s.status === 'green' ? 'var(--ok)' : 'var(--err)';
+    html += `<tr>
+      <td style="font-weight:700">${escapeHtml(dep)}</td>
+      <td><span style="color:${color};font-weight:700">${label}</span></td>
+      <td style="font-size:11px">${escapeHtml(s.label)}</td>
+    </tr>`;
   }
-  if (ordersCurrentPage < totalPages) html += `<button class="page-btn" onclick="changeOrdersPage(${ordersCurrentPage+1})">❯</button>`;
-  document.getElementById('ordersPagination').innerHTML = html;
+  html += `</tbody></table></div>`;
+  resBox.innerHTML = html;
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ph ph-activity"></i><span>شروع مجدد اسکن</span>';
+  toast('✓ اسکن کامل شد', 'ok');
 }
 
-function changeOrdersPage(p) { ordersCurrentPage = p; displayOrders(); }
-
-function updateOrderStats() {
-  const total = filteredOrders.length;
-  const pending = filteredOrders.filter(o => o.status === 'pending').length;
-  const completed = filteredOrders.filter(o => o.status === 'completed').length;
-  const today = new Date().toISOString().split('T')[0];
-  const todayRevenue = filteredOrders
-    .filter(o => o.date_created.startsWith(today) && o.status === 'completed')
-    .reduce((sum, o) => sum + parseFloat(o.total), 0);
-  
-  document.getElementById('ordTotal').innerText = total.toLocaleString('fa-IR');
-  document.getElementById('ordPending').innerText = pending.toLocaleString('fa-IR');
-  document.getElementById('ordCompleted').innerText = completed.toLocaleString('fa-IR');
-  document.getElementById('ordTodayRevenue').innerText = Math.round(todayRevenue).toLocaleString('fa-IR');
+/* ===== ABOUT HERO (static current time, no cycle) ===== */
+function getGreeting(){
+  const h = new Date().getHours();
+  if(h >= 5 && h < 12) return {text:'صبح بخیر', period:'morning'};
+  if(h >= 12 && h < 17) return {text:'ظهر بخیر', period:'noon'};
+  if(h >= 17 && h < 20) return {text:'عصر بخیر', period:'evening'};
+  return {text:'شب بخیر', period:'night'};
 }
 
-function getOrderStatusText(st) {
-  const map = { pending:'در انتظار', processing:'در حال انجام', completed:'تکمیل شده', cancelled:'لغو شده', refunded:'مرجوع' };
-  return map[st] || st;
+function generateHeroStars(){
+  const el = document.getElementById('heroStars');
+  if(!el) return;
+  let h = '';
+  for(let i=0;i<48;i++){
+    const x = (Math.random()*100).toFixed(2);
+    const y = (Math.random()*100).toFixed(2);
+    const s = (0.8 + Math.random()*1.6).toFixed(2);
+    const d = (Math.random()*3).toFixed(2);
+    h += `<div class="hero-star" style="left:${x}%;top:${y}%;width:${s}px;height:${s}px;animation-delay:${d}s"></div>`;
+  }
+  el.innerHTML = h;
 }
 
-window.toggleOrderSelect = (id, checked) => {
-  if (checked) selectedOrders.add(id); else selectedOrders.delete(id);
-};
-
-window.toggleSelectAllOrders = () => {
-  const cb = document.getElementById('selectAllOrders');
-  const pageData = filteredOrders.slice((ordersCurrentPage-1)*ORDERS_PER_PAGE, ordersCurrentPage*ORDERS_PER_PAGE);
-  if (cb.checked) pageData.forEach(o => selectedOrders.add(o.id));
-  else pageData.forEach(o => selectedOrders.delete(o.id));
-  displayOrders();
-};
-
-window.viewOrderDetail = (orderId) => {
-  const order = currentOrders.find(o => o.id === orderId);
-  if (!order) return;
-  const items = order.line_items || [];
+function updateAboutHeroStatic(){
+  const sky = document.getElementById('heroSky');
+  const sun = document.getElementById('heroSun');
+  const moon = document.getElementById('heroMoon');
+  const greetEl = document.getElementById('heroGreeting');
+  const dateEl = document.getElementById('heroDate');
+  if(!sky || !greetEl) return;
   
-  let modalHtml = `
-    <div style="margin-bottom:1rem;">
-      <h3 style="color:var(--accent-gold);">سفارش #${order.number}</h3>
-      <p>تاریخ: ${new Date(order.date_created).toLocaleString('fa-IR')}</p>
-    </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
-      <div><strong>مشتری:</strong> ${order.customer_name}<br>📧 ${order.customer_email || '---'}<br>📞 ${order.customer_phone || '---'}</div>
-      <div><strong>آدرس:</strong> ${order.billing?.address_1 || ''} ${order.billing?.city || ''}</div>
-    </div>
-    <h4>اقلام سفارش:</h4>
-    <table class="order-items-table">
-      ${items.map(item => `
-        <tr><td>${item.name} × ${item.quantity}</td><td style="text-align:left;">${parseInt(item.total).toLocaleString('fa-IR')} تومان</td></tr>
-      `).join('')}
-    </table>
-    <div style="text-align:left; margin-top:1rem; font-size:1.2rem; font-weight:bold;">
-      جمع کل: ${parseInt(order.total).toLocaleString('fa-IR')} تومان
-    </div>
-    ${order.customer_note ? `<div style="margin-top:1rem; padding:0.5rem; background:rgba(212,175,55,0.1); border-radius:0.5rem;">📝 ${order.customer_note}</div>` : ''}
-  `;
+  const g = getGreeting();
+  sky.className = 'hero-sky period-' + g.period;
+  greetEl.textContent = g.text;
   
-  showModal('جزئیات سفارش', modalHtml);
-};
-
-window.openChangeOrderStatus = (orderId) => {
-  const order = currentOrders.find(o => o.id === orderId);
-  if (!order) return;
-  
-  let html = `
-    <input type="hidden" id="modalOrderId" value="${orderId}">
-    <div class="form-group">
-      <label>وضعیت جدید:</label>
-      <select id="modalNewStatus" class="form-input">
-        <option value="pending" ${order.status==='pending'?'selected':''}>در انتظار</option>
-        <option value="processing" ${order.status==='processing'?'selected':''}>در حال انجام</option>
-        <option value="completed" ${order.status==='completed'?'selected':''}>تکمیل شده</option>
-        <option value="cancelled" ${order.status==='cancelled'?'selected':''}>لغو شده</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>یادداشت:</label>
-      <textarea id="modalStatusNote" class="form-textarea" placeholder="اختیاری..."></textarea>
-    </div>
-    <button class="btn btn-gold" onclick="submitOrderStatusChange()">ذخیره</button>
-  `;
-  showModal('تغییر وضعیت سفارش', html);
-};
-
-window.submitOrderStatusChange = async () => {
-  const orderId = document.getElementById('modalOrderId').value;
-  const newStatus = document.getElementById('modalNewStatus').value;
-  const note = document.getElementById('modalStatusNote').value;
-  
-  showLoading();
-  try {
-    const url = `${appConfig.siteUrl}/wp-json/wc/v3/orders/${orderId}?consumer_key=${appConfig.consumerKey}&consumer_secret=${appConfig.consumerSecret}`;
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ status: newStatus })
-    });
-    if (!res.ok) throw new Error('خطا');
-    
-    // افزودن یادداشت (اختیاری)
-    if (note) {
-      await fetch(`${appConfig.siteUrl}/wp-json/wc/v3/orders/${orderId}/notes?consumer_key=${appConfig.consumerKey}&consumer_secret=${appConfig.consumerSecret}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ note, customer_note: false })
-      });
+  if(sun && moon) {
+    if (g.period === 'night') { sun.style.opacity = 0; moon.style.opacity = 1; }
+    else {
+      sun.style.opacity = 1; moon.style.opacity = 0;
+      if (g.period === 'morning') { sun.style.left = '12%'; sun.style.top = '60%'; }
+      if (g.period === 'noon') { sun.style.left = '50%'; sun.style.top = '15%'; }
+      if (g.period === 'evening') { sun.style.left = '82%'; sun.style.top = '58%'; }
     }
-    
-    closeModal();
-    loadOrders();
-    log(`وضعیت سفارش #${orderId} به ${getOrderStatusText(newStatus)} تغییر یافت`, 'success');
-  } catch (e) {
-    alert('خطا در تغییر وضعیت');
-  } finally {
-    hideLoading();
   }
-};
 
-window.printOrderInvoice = (orderId) => {
-  const order = currentOrders.find(o => o.id === orderId);
-  if (!order) return;
-  const items = order.line_items || [];
-  const printWin = window.open('', '_blank');
-  printWin.document.write(`
-    <html dir="rtl"><head><title>فاکتور ${order.number}</title>
-    <style>body{font-family:system-ui;padding:20px;max-width:800px;margin:0 auto;} .header{text-align:center;border-bottom:2px solid #d4af37;padding-bottom:10px;} table{width:100%;border-collapse:collapse;margin:20px 0;} td,th{padding:8px;border-bottom:1px solid #ddd;} .total{text-align:left;font-size:1.2em;}</style>
-    </head><body>
-    <div class="header"><h1>جواهری مشاهیر</h1><p>فاکتور رسمی</p></div>
-    <p><strong>شماره سفارش:</strong> ${order.number}</p>
-    <p><strong>مشتری:</strong> ${order.customer_name}</p>
-    <p><strong>تاریخ:</strong> ${new Date(order.date_created).toLocaleDateString('fa-IR')}</p>
-    <table><thead><tr><th>محصول</th><th>تعداد</th><th>قیمت واحد</th><th>جمع</th></tr></thead><tbody>
-    ${items.map(i => `<tr><td>${i.name}</td><td>${i.quantity}</td><td>${parseInt(i.price).toLocaleString('fa-IR')}</td><td>${parseInt(i.total).toLocaleString('fa-IR')}</td></tr>`).join('')}
-    </tbody></table>
-    <div class="total">جمع کل: ${parseInt(order.total).toLocaleString('fa-IR')} تومان</div>
-    </body></html>
-  `);
-  printWin.document.close();
-  printWin.print();
-};
+  if(dateEl){
+    const now = new Date();
+    const wd = new Intl.DateTimeFormat('fa-IR',{weekday:'long'}).format(now);
+    const dt = new Intl.DateTimeFormat('fa-IR',{day:'2-digit',month:'long',year:'numeric'}).format(now);
+    dateEl.textContent = wd + ' · ' + dt;
+  }
+}
 
-function exportOrdersToExcel() {
-  let csv = "\uFEFFشماره سفارش,مشتری,تاریخ,مبلغ,وضعیت,پرداخت\n";
-  filteredOrders.forEach(o => {
-    csv += `"${o.number}","${o.customer_name}","${o.date_created}","${o.total}","${getOrderStatusText(o.status)}","${o.payment_method||''}"\n`;
+/* ===== ABOUT RENDER ===== */
+function getLastUpdateTs(){
+  const cl = (db.meta && db.meta.changelog) || [];
+  if(!cl.length) return db.meta.createdAt || APP_BUILD_ISO;
+  let latest = null;
+  cl.forEach(c => { const d = safeDate(c.ts); if(d && (!latest || d > latest)) latest = d; });
+  return latest ? latest.toISOString() : (db.meta.createdAt || APP_BUILD_ISO);
+}
+
+function renderAbout(){
+  try{
+    const m = db.meta || {};
+    const lastUpd = getLastUpdateTs();
+    const rows = [
+      ['نسخه برنامه', `<span class="ver-badge">v${faNum(APP_VERSION)}</span>`],
+      ['تاریخ ساخت نسخه', escapeHtml(APP_BUILD_DATE_FA)],
+      ['تاریخ آخرین بروزرسانی', `${escapeHtml(jDateShort(lastUpd))} <span class="days-badge">${escapeHtml(daysAgo(lastUpd))}</span>`],
+      ['تاریخ نصب', escapeHtml(jDateShort(m.createdAt))],
+      ['طراح', escapeHtml(m.designer || 'حسن حاجی قاسمی')],
+      ['سازنده', escapeHtml(m.algorithm || 'گروه هنری اقاقیا')]
+    ];
+    const at = document.getElementById('aboutTable');
+    if(at) at.innerHTML = rows.map(([k,v])=>`<tr><th>${escapeHtml(k)}</th><td>${v}</td></tr>`).join('');
+  }catch(e){ console.warn(e); }
+
+  try{ renderTechCarousel(); }catch(e){}
+  try{ renderVersionAccordion(); }catch(e){}
+  try{ renderBackups(); }catch(e){}
+  try{ renderLogs(); }catch(e){}
+}
+
+function renderTechCarousel(){
+  const techs = [
+    {n:'HTML5 / CSS3', d:'ساختار و استایل', i:'ph-file-html'},
+    {n:'JavaScript ES2022', d:'منطق برنامه', i:'ph-brackets-curly'},
+    {n:'IndexedDB', d:'کش کتابخانه‌ها', i:'ph-database'},
+    {n:'Vazirmatn', d:'فونت فارسی', i:'ph-text-aa'},
+    {n:'Phosphor Icons', d:'آیکون‌های برداری', i:'ph-icons'},
+    {n:'LZ-String', d:'فشرده‌سازی داده', i:'ph-archive-box'},
+    {n:'AG Grid 31', d:'جدول داده پیشرفته', i:'ph-table'},
+    {n:'Persian Datepicker', d:'تاریخ شمسی', i:'ph-calendar-blank'},
+    {n:'Chart.js', d:'نمودارها', i:'ph-chart-line'}
+  ];
+  const track = document.getElementById('techTrack');
+  if(!track) return;
+  const html = techs.map(t => `<div class="tech-item"><div class="ti-icon"><i class="ph ${t.i}"></i></div><div class="ti-body"><div class="ti-name">${t.n}</div><div class="ti-desc">${t.d}</div></div></div>`).join('');
+  // duplicate for seamless loop
+  track.innerHTML = html + html;
+}
+
+function renderVersionAccordion(){
+  const el = document.getElementById('versionAccordion');
+  if(!el) return;
+  const cl = (db.meta && db.meta.changelog) || [];
+  if(!cl.length){ el.innerHTML = '<div class="muted">تغییری ثبت نشده</div>'; return; }
+  
+  // Sort: newest first
+  const sorted = [...cl].sort((a,b) => (safeDate(b.ts)||0) - (safeDate(a.ts)||0));
+  
+  el.innerHTML = sorted.map((c, idx) => {
+    const isOpen = idx === 0 ? ' open' : '';
+    let body = '';
+    if(c.newItems && c.newItems.length){
+      body += `<div class="vbi-group"><div class="vbi-group-title vbi-new"><i class="ph ph-sparkle"></i>جدید</div><ul class="vbi-list">${c.newItems.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
+    }
+    if(c.updates && c.updates.length){
+      body += `<div class="vbi-group"><div class="vbi-group-title vbi-upd"><i class="ph ph-arrows-clockwise"></i>بروزرسانی</div><ul class="vbi-list">${c.updates.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
+    }
+    if(c.fixes && c.fixes.length){
+      body += `<div class="vbi-group"><div class="vbi-group-title vbi-fix"><i class="ph ph-wrench"></i>اصلاح</div><ul class="vbi-list">${c.fixes.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
+    }
+    if(c.notes){
+      body += `<div class="vbi-group"><div class="vbi-group-title" style="color:var(--text2)"><i class="ph ph-note"></i>یادداشت</div><p style="font-size:11.5px;color:var(--text2);line-height:1.7">${escapeHtml(c.notes)}</p></div>`;
+    }
+    return `<div class="version-card${isOpen}" data-vidx="${idx}">
+      <button class="version-header">
+        <span class="vh-badge">v${faNum(c.version)}</span>
+        <span class="vh-title">${escapeHtml(c.notes || ('نسخه '+c.version))}</span>
+        <span class="vh-date">${escapeHtml(jDateShort(c.ts))}</span>
+        <i class="ph ph-caret-down vh-chev"></i>
+      </button>
+      <div class="version-body"><div class="version-body-inner">${body || '<div class="muted">—</div>'}</div></div>
+    </div>`;
+  }).join('');
+  
+  el.querySelectorAll('.version-header').forEach(btn => {
+    btn.onclick = () => {
+      const card = btn.closest('.version-card');
+      const wasOpen = card.classList.contains('open');
+      // close all
+      el.querySelectorAll('.version-card').forEach(c => c.classList.remove('open'));
+      // open this one if wasn't open
+      if(!wasOpen) card.classList.add('open');
+    };
   });
-  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `orders_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
 }
 
-function batchChangeOrderStatus() {
-  if (selectedOrders.size === 0) { alert('هیچ سفارشی انتخاب نشده'); return; }
-  let html = `
-    <p>${selectedOrders.size} سفارش انتخاب شده</p>
-    <div class="form-group">
-      <label>وضعیت جدید:</label>
-      <select id="batchNewStatus" class="form-input">
-        <option value="pending">در انتظار</option>
-        <option value="processing">در حال انجام</option>
-        <option value="completed">تکمیل شده</option>
-        <option value="cancelled">لغو شده</option>
-      </select>
-    </div>
-    <button class="btn btn-gold" onclick="submitBatchStatusChange()">اعمال</button>
-  `;
-  showModal('تغییر وضعیت گروهی', html);
+function renderReports(){
+  try{
+    const totalItems = Object.keys(db.items).length;
+    const totalVersions = Object.values(db.items).reduce((s,it)=>s+((it.versions||[]).length),0);
+    const rows = [
+      ['تعداد آیتم‌ها', faNum(totalItems)],
+      ['کل نسخه‌ها', faNum(totalVersions)],
+      ['تعداد لاگ‌ها', faNum(db.logs.length)],
+      ['تعداد بک‌آپ‌ها', faNum(db.backups.length)]
+    ];
+    const tbl = document.getElementById('fullStatsTable');
+    if(tbl) tbl.innerHTML = rows.map(([k,v])=>`<tr><th>${escapeHtml(k)}</th><td style="direction:rtl;text-align:right">${v}</td></tr>`).join('');
+  }catch(e){}
+
+  try{
+    const pt = document.getElementById('projectsTable');
+    if(pt){
+      const itemsList = Object.values(db.items).map(it => ({name:it.name, cat:it.category, count:(it.versions||[]).length}));
+      if(!itemsList.length){ pt.innerHTML = '<tr><td style="text-align:center;color:var(--text3);padding:20px">آیتمی نیست</td></tr>'; }
+      else {
+        pt.innerHTML = `<thead><tr><th>نام</th><th>نوع</th><th>نسخه</th></tr></thead><tbody>${itemsList.map(it => `<tr><td>${escapeHtml(it.name)}</td><td>${escapeHtml(it.cat||'—')}</td><td><span class="badge-cnt">${faNum(it.count)}</span></td></tr>`).join('')}</tbody>`;
+      }
+    }
+  }catch(e){}
+
+  try{ renderCategoryChart(); }catch(e){}
 }
 
-window.submitBatchStatusChange = async () => {
-  const newStatus = document.getElementById('batchNewStatus').value;
-  const ids = Array.from(selectedOrders);
-  showLoading();
-  let success = 0;
-  for (const id of ids) {
+function renderCategoryChart(){
+  const byCat = {};
+  Object.values(db.items).forEach(it => { const c = it.category || 'بی‌دسته'; byCat[c] = (byCat[c]||0) + 1; });
+  const total = Object.values(byCat).reduce((s,n)=>s+n,0);
+  const catColors = ['#22d3ee','#a855f7','#f472b6','#34d399','#fbbf24','#f87171','#818cf8','#fb923c'];
+  const entries = Object.entries(byCat);
+  const cc = document.getElementById('categoryChart');
+  if(cc){
+    if(!total){ cc.innerHTML = '<div class="empty"><i class="ph ph-chart-pie"></i>آیتمی نیست</div>'; }
+    else {
+      let offset = 0;
+      const r=70, cx=90, cy=90, stroke=28, circ=2*Math.PI*r;
+      const segments = entries.map(([c,n],i) => {
+        const len = (n/total)*circ;
+        const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${catColors[i%catColors.length]}" stroke-width="${stroke}" stroke-dasharray="${len} ${circ-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`;
+        offset += len;
+        return seg;
+      }).join('');
+      cc.innerHTML = `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><svg width="180" height="180" viewBox="0 0 180 180"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="${stroke}"/>${segments}<text x="${cx}" y="${cy-6}" text-anchor="middle" fill="currentColor" font-size="20" font-weight="800">${faNum(total)}</text><text x="${cx}" y="${cy+14}" text-anchor="middle" fill="var(--text2)" font-size="10">آیتم</text></svg><div style="flex:1;min-width:120px">${entries.map(([c,n],i)=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px"><span style="width:10px;height:10px;border-radius:3px;background:${catColors[i%catColors.length]}"></span><span style="flex:1">${escapeHtml(c)}</span><b style="color:var(--text2)">${faNum(n)}</b></div>`).join('')}</div></div>`;
+    }
+  }
+}
+
+function renderBackups(){
+  const body = document.getElementById('backupBody');
+  if(!body) return;
+  if(!db.backups || !db.backups.length){ body.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text3);height:44px">بک‌آپی نیست</td></tr>'; return; }
+  body.innerHTML = [...db.backups].reverse().map(b => {
+    const totalVers = b.data && b.data.items ? Object.values(b.data.items).reduce((s,it)=>s+((it.versions||[]).length),0) : 0;
+    const totalItms = b.data && b.data.items ? Object.keys(b.data.items).length : 0;
+    return `<tr><td title="${jDateFull(b.ts)}">${jDateShort(b.ts)}</td><td><span class="badge-cnt">${faNum(totalItms)}</span></td><td><span class="badge-cnt">${faNum(totalVers)}</span></td><td class="actions"><button class="res" onclick="restoreBackup('${b.id}')"><i class="ph ph-arrows-counter-clockwise"></i></button><button class="dl" onclick="downloadBackup('${b.id}')"><i class="ph ph-download-simple"></i></button><button class="del" onclick="deleteBackup('${b.id}')"><i class="ph ph-trash"></i></button></td></tr>`;
+  }).join('');
+}
+
+function renderLogs(){
+  try{
+    const body = document.getElementById('logBody');
+    if(!body) return;
+    const q = (document.getElementById('logSearch')?.value || '').toLowerCase();
+    const filter = document.getElementById('logFilter')?.value || 'all';
+    const logs = [...db.logs].reverse().filter(l => {
+      if(!l) return false;
+      if(filter !== 'all' && l.type !== filter) return false;
+      if(q && !((l.action||'')+(l.detail||'')).toLowerCase().includes(q)) return false;
+      return true;
+    }).slice(0, 100);
+    const typeLabels = {save:'ذخیره',create:'ایجاد',delete:'حذف',backup:'بک‌آپ',restore:'بازگردانی',other:'سایر'};
+    if(!logs.length){ body.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text3);height:38px">لاگی نیست</td></tr>'; return; }
+    body.innerHTML = logs.map(l => `<tr><td title="${jDateFull(l.ts)}">${jDateFull(l.ts)}</td><td><span class="log-tag type-${l.type||'other'}">${typeLabels[l.type||'other']}</span></td><td>${escapeHtml(l.action||'—')}</td><td title="${escapeHtml(l.detail||'')}">${escapeHtml(l.detail||'')}</td></tr>`).join('');
+  }catch(e){}
+}
+
+/* ===== LIB DOWNLOAD ===== */
+window.openLibDownload = async () => {
+  const deps = (window._currentMeta && window._currentMeta.dependencies) || [];
+  if(!deps.length) { toast('کتابخانه‌ای در این آیتم وجود ندارد', 'warn'); return; }
+  const modal = document.getElementById('syncModal');
+  const title = document.getElementById('syncTitle');
+  const body = document.getElementById('syncBody');
+  if(!modal || !title || !body) return;
+  title.textContent = 'دانلود کتابخانه‌ها';
+  body.innerHTML = '<div class="empty"><i class="ph ph-spinner"></i>در حال بررسی...</div>';
+  modal.classList.add('show');
+  
+  let html = '<div style="font-size:12px;line-height:2">';
+  for (const dep of deps) {
+    const status = await getLibStatus(dep);
+    const isCached = status.source === 'cache' || status.source === 'folder';
+    const icon = status.status === 'green' ? 'ph-check-circle' : 'ph-download-simple';
+    const color = status.status === 'green' ? 'var(--ok)' : 'var(--accent)';
+    const label = isCached ? 'در حافظه ذخیره شده' : 'آماده دانلود';
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)"><i class="ph ${icon}" style="color:${color};font-size:18px"></i><b style="flex:1">${escapeHtml(dep)}</b><span style="font-size:10.5px;color:var(--text2)">${label}</span></div>`;
+  }
+  html += `<div class="flex-row mt-12"><button class="icon-action primary" onclick="downloadAllDeps('${encodeURIComponent(JSON.stringify(deps))}')"><i class="ph ph-download-simple"></i><span class="lbl">دانلود همه</span></button><button class="icon-action" onclick="document.getElementById('syncModal').classList.remove('show')">بستن</button></div></div>`;
+  body.innerHTML = html;
+};
+
+window.downloadAllDeps = async (depsJson) => {
+  const deps = JSON.parse(decodeURIComponent(depsJson));
+  let count = 0;
+  for (const dep of deps) {
+    const cached = await checkLibCache(dep);
+    if (cached) { count++; continue; }
+    const urls = getLibCDNUrls(dep);
+    if (!urls.length) continue;
     try {
-      const url = `${appConfig.siteUrl}/wp-json/wc/v3/orders/${id}?consumer_key=${appConfig.consumerKey}&consumer_secret=${appConfig.consumerSecret}`;
-      const res = await fetch(url, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ status: newStatus })
-      });
-      if (res.ok) success++;
-    } catch (e) {}
+      const res = await fetch(urls[0]);
+      if (!res.ok) continue;
+      const content = await res.text();
+      const type = urls[0].endsWith('.css') ? 'css' : 'js';
+      await saveLibCache(dep, content, type);
+      count++;
+    } catch(e) { console.warn('Download failed:', dep, e); }
   }
-  closeModal();
-  loadOrders();
-  selectedOrders.clear();
-  log(`وضعیت ${success} سفارش به ${getOrderStatusText(newStatus)} تغییر یافت`, 'success');
-  hideLoading();
+  toast(`✓ ${count} کتابخانه دانلود و ذخیره شد`, 'ok');
+  document.getElementById('syncModal').classList.remove('show');
 };
 
-// تابع کمکی برای نمایش مودال (سازگار با طراحی رادیکال)
-function showModal(title, content) {
-  let modal = document.getElementById('orderActionModal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'orderActionModal';
-    modal.className = 'modal-overlay';
-    modal.style.display = 'flex';
-    modal.innerHTML = `
-      <div class="modal-content">
-        <span class="close-modal" onclick="closeModal()">&times;</span>
-        <h3 id="modalTitle" style="color:var(--accent-gold); margin-bottom:1rem;">${title}</h3>
-        <div id="modalBody"></div>
+/* ===== CONFIRM ===== */
+let confirmResolve = null;
+function confirmDialog(title, msg){
+  return new Promise(resolve => {
+    confirmResolve = resolve;
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMsg').textContent = msg;
+    document.getElementById('confirmModal').classList.add('show');
+  });
+}
+function closeConfirm(val){
+  document.getElementById('confirmModal').classList.remove('show');
+  if(confirmResolve){ confirmResolve(val); confirmResolve = null; }
+}
+
+/* ===== ICON PICKER ===== */
+const LIBRARY_ICONS = ['house','star','heart','book','code','image','music-note','film-slate','table','chart-bar','palette','sparkle','lightning','fire','rocket','crown','gem','shield-check','cloud','sun','moon','tree','flower','horse','boat','anchor','user','users','envelope','bell','calendar','clock','map-pin','globe','phone','camera','headphones','game-controller','pencil-simple','folder','file-text','database','cube','circle','square','triangle','arrow-right','arrow-left','check-circle','x-circle','plus-circle','minus-circle','info','gear','wrench','hammer','paint-brush','scissors','magnet','cpu','hard-drive','wifi-high'];
+function renderIconGrid(search){
+  const cur = (db.items[iconItemDD.getValue()]||{}).icon || '';
+  const filtered = LIBRARY_ICONS.filter(n => n.includes((search||'').toLowerCase()));
+  const grid = document.getElementById('iconGrid');
+  if(!grid) return;
+  grid.innerHTML = filtered.length ? filtered.map(n => `<button class="icon-cell${cur===n?' active':''}" data-icon="${n}"><i class="ph ph-${n}"></i></button>`).join('') : '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">آیکونی یافت نشد</div>';
+  grid.querySelectorAll('.icon-cell').forEach(b => {
+    b.onclick = () => {
+      const item = db.items[iconItemDD.getValue()];
+      if(item){ item.icon = b.dataset.icon; saveDB(); log('تعیین آیکون', `${item.name} → ${b.dataset.icon}`,'other'); toast('✓ ثبت شد','ok'); renderCarousel(); }
+      document.getElementById('iconPickerModal').classList.remove('show');
+    };
+  });
+}
+
+/* ===== SAVE ===== */
+function doSave(){
+  const codeInput = document.getElementById('codeInput');
+  const code = codeInput?.value.trim();
+  if(!code){ toast('کد را وارد کنید','err'); return; }
+  const name = itemDD.getValue();
+  if(!name){ toast('آیتم را انتخاب کنید','err'); return; }
+  const p = parseItemCode(code);
+  let cat = catDD.getValue();
+  if(!cat && p.ok){ cat = detectCategory(p.data); if(!db.categories.includes(cat)) db.categories.push(cat); refreshCatDD(); catDD.setValue(cat); }
+  if(!cat) cat = 'کامپوننت';
+  const subj = p.ok ? detectSubject(p.data) : 'عمومی';
+  if(!db.subjects.includes(subj)) db.subjects.push(subj);
+  if(!db.categories.includes(cat)) db.categories.push(cat);
+  if(!db.items[name]) db.items[name] = {name, category:cat, subject:subj, createdAt:new Date().toISOString(), versions:[]};
+  db.items[name].category = cat;
+  db.items[name].subject = subj;
+  const version = (db.items[name].versions||[]).length + 1;
+  const metaData = p.ok ? p.data : {title:name};
+  if(p.raw && !metaData.html) metaData.html = code;
+  // ensure category is set on metaData for auto-registration
+  if(!metaData.category) metaData.category = cat;
+  db.items[name].versions.push({version, ts:new Date().toISOString(), code, meta: metaData, raw: p.raw});
+  log('ذخیره آیتم', `${name} — نسخه ${version}`,'save');
+  saveDB();
+  refreshItemDD(); refreshCatDD();
+  if(codeInput) codeInput.value = '';
+  const ep = document.getElementById('entryPreview'); if(ep) ep.innerHTML = '';
+  toast(`✓ ذخیره شد: ${name} (نسخه ${version})`,'ok');
+}
+
+/* ===== ONLINE SAVE/LOAD ===== */
+async function onlineSaveNow(){
+  const data = {meta: db.meta, items: db.items, categories: db.categories, subjects: db.subjects, _fmt: 'noah-ark-lz-v1'};
+  const json = JSON.stringify(data);
+  const compressed = LZString.compressToBase64(json);
+  try{
+    const res = await fetch('https://paste.rs', {method:'POST', body: compressed, headers:{'Content-Type':'text/plain'}});
+    if(res.ok){
+      const url = (await res.text()).trim();
+      const id = url.split('/').pop();
+      return {service:'paste.rs', id, compressedSize: compressed.length, originalSize: json.length};
+    }
+  }catch(e){}
+  try{
+    const res = await fetch('https://jsonblob.com/api/jsonBlob', {
+      method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body: JSON.stringify({_fmt:'noah-ark-lz-v1', compressed})
+    });
+    if(res.ok){
+      const loc = res.headers.get('Location') || '';
+      const id = loc.split('/').pop();
+      return {service:'jsonblob', id, compressedSize: compressed.length, originalSize: json.length};
+    }
+  }catch(e){}
+  throw new Error('سرویس‌های ذخیره‌سازی در دسترس نیستند.');
+}
+async function onlineLoadById(service, id){
+  if(service === 'paste.rs'){
+    const res = await fetch(`https://paste.rs/${id}`); if(!res.ok) throw new Error('paste.rs '+res.status);
+    return JSON.parse(LZString.decompressFromBase64(await res.text()));
+  }
+  if(service === 'jsonblob'){
+    const res = await fetch(`https://jsonblob.com/api/jsonBlob/${id}`); if(!res.ok) throw new Error('jsonblob '+res.status);
+    const j = await res.json();
+    return j && j.compressed ? JSON.parse(LZString.decompressFromBase64(j.compressed)) : j;
+  }
+  throw new Error('سرویس ناشناخته');
+}
+
+/* ===== BULK ===== */
+function openBulkModal(){
+  document.getElementById('bulkInput').value = '';
+  document.getElementById('bulkResult').innerHTML = '';
+  document.getElementById('bulkModal').classList.add('show');
+}
+async function processBulk(){
+  const text = document.getElementById('bulkInput').value.trim();
+  if(!text){ toast('چیزی برای پردازش نیست','err'); return; }
+  const items = parseBulk(text);
+  if(!items.length){ toast('هیچ آیتم معتبری پیدا نشد','err'); return; }
+  let created = 0, updated = 0, failed = 0;
+  for(const data of items){
+    try{
+      if(!data || typeof data !== 'object'){ failed++; continue; }
+      const name = data.title || data.name || ('آیتم-'+Date.now()+'-'+Math.random().toString(36).slice(2,6));
+      const subj = data.subject || detectSubject(data);
+      const cat = data.category || detectCategory(data);
+      if(!db.subjects.includes(subj)) db.subjects.push(subj);
+      if(!db.categories.includes(cat)) db.categories.push(cat);
+      const isNew = !db.items[name];
+      if(isNew){ db.items[name] = {name, category:cat, subject:subj, createdAt:new Date().toISOString(), versions:[]}; created++; }
+      else { updated++; }
+      db.items[name].category = cat;
+      db.items[name].subject = subj;
+      const version = (db.items[name].versions||[]).length + 1;
+      const code = '===NOAH-ARK-ITEM-v1===\n'+JSON.stringify(data,null,2)+'\n===END-NOAH-ARK-ITEM===';
+      db.items[name].versions.push({version, ts:new Date().toISOString(), code, meta: data, raw: false});
+    }catch(e){ failed++; }
+  }
+  saveDB();
+  log('ورود گروهی', `${created} جدید، ${updated} به‌روزرسانی، ${failed} خطا`, 'create');
+  refreshItemDD(); refreshCatDD();
+  document.getElementById('bulkResult').innerHTML = `<div style="padding:10px;background:rgba(52,211,153,0.1);border-radius:8px;font-size:12px"><b style="color:var(--ok)">✓ انجام شد</b> — جدید: ${faNum(created)} · به‌روزرسانی: ${faNum(updated)} · خطا: ${faNum(failed)}</div>`;
+  toast(`✓ ${created+updated} آیتم پردازش شد`,'ok');
+}
+
+/* ===== GUIDE (PROMPT-ONLY) ===== */
+const GUIDE_TEXT = `=== NOAH-ARK ITEM WRITING PROMPT ===
+
+You are generating code items for the NOAH-ARK storage system.
+The system parses, executes, and stores items via a strict JSON format.
+Read and follow these rules exactly.
+
+────────── FORMAT (MANDATORY) ──────────
+Each item must be wrapped in:
+
+===NOAH-ARK-ITEM-v1===
+{ VALID JSON OBJECT }
+===END-NOAH-ARK-ITEM===
+
+────────── JSON SCHEMA ──────────
+{
+  "title": "string — unique item name",
+  "category": "string — نوع آیتم (auto-registered)",
+  "subject": "string — optional",
+  "description": "string — one line",
+  "style": "string — palette/fonts",
+  "usage": "string — how to use",
+  "params": { "name": {"type": "string", "default": "value"} },
+  "dependencies": ["lib name", "..."],
+  "html": "<div>...</div>",
+  "css": ".class{...}",
+  "js": "(() => { ... })();"
+}
+
+────────── RULES ──────────
+1. Body MUST be valid JSON. Double quotes only. No trailing commas.
+2. Fields title, category, description, style, usage, html, css, js are REQUIRED.
+3. Empty fields must be "" (empty string), never null.
+4. Inside "js", escape <\/script> as <\\/script>.
+5. "category" determines the type. Common values:
+   کامپوننت / فرم / نمودار / بنر / کارت / دکمه / گالری / ناوبری / جدول
+   → system will auto-register a new type if unknown.
+6. All dependencies MUST be listed in "dependencies" with a recognizable name.
+7. Do NOT reference global app variables (window.db, window.app, etc.).
+8. All code runs in a sandboxed iframe with dir="rtl" and Vazirmatn font.
+
+────────── DEPENDENCY NAME MAP ──────────
+Recognized names (case-insensitive):
+  "AG Grid 31" / "ag-grid-community" → ag-grid-community@31
+  "Persian Datepicker" → persian-datepicker@1.2
+  "Persian Date" → persian-date@1.2
+  "Chart.js" → chart.js@4
+  "GSAP" → gsap@3
+  "Bootstrap" → bootstrap@5
+  "jQuery" → jquery@3.7
+  "Swiper" → swiper@11
+  "Vazirmatn" → Vazirmatn font
+  "Phosphor Icons" → phosphor-icons
+  For other libs, use the npm package name (e.g. "alpinejs", "three").
+
+────────── EXAMPLE: AG GRID TABLE ──────────
+===NOAH-ARK-ITEM-v1===
+{
+  "title": "جدول سفارشات",
+  "category": "جدول",
+  "description": "جدول AG Grid با فیلتر و سرچ",
+  "style": "تیره، طلایی",
+  "usage": "درج در صفحه",
+  "params": {},
+  "dependencies": ["AG Grid 31", "Vazirmatn", "Phosphor Icons"],
+  "html": "<div id='myGrid' class='ag-theme-quartz-dark' style='height:500px'></div>",
+  "css": "#myGrid{--ag-background-color:#0b0f19;--ag-header-background-color:#151a26;--ag-foreground-color:#e2e8f0;--ag-border-color:#2a3a4a}",
+  "js": "const api = agGrid.createGrid(document.getElementById('myGrid'), { columnDefs:[{field:'name',headerName:'نام'},{field:'amount',headerName:'مبلغ'}], rowData:[{name:'علی',amount:1000},{name:'مریم',amount:2000}], pagination:true, paginationPageSize:10 });"
+}
+===END-NOAH-ARK-ITEM===
+
+────────── EXAMPLE: PERSIAN DATEPICKER ──────────
+===NOAH-ARK-ITEM-v1===
+{
+  "title": "انتخاب تاریخ شمسی",
+  "category": "فرم",
+  "description": "ورودی تاریخ شمسی",
+  "style": "روشن",
+  "usage": "در فرم‌ها",
+  "params": {},
+  "dependencies": ["Persian Datepicker", "Persian Date"],
+  "html": "<input type='text' id='dp' placeholder='تاریخ'><p id='res'></p>",
+  "css": "input{padding:8px;border-radius:8px;border:1px solid #ccc}",
+  "js": "new persianDatepicker('#dp', {format:'YYYY/MM/DD', onSelect:(u)=>{document.getElementById('res').textContent=u.format('YYYY/MM/DD');}});"
+}
+===END-NOAH-ARK-ITEM===
+
+────────── CHECKLIST BEFORE SUBMIT ──────────
+✓ Wrapped in ===NOAH-ARK-ITEM-v1=== ... ===END-NOAH-ARK-ITEM===
+✓ Body is valid JSON (parse it mentally)
+✓ All required fields present
+✓ category is set (for auto-registration)
+✓ dependencies array lists every external library
+✓ html/css/js contain no <\\/script> that isn't escaped
+✓ Code runs without referencing app globals
+
+=== END PROMPT ===`;
+
+/* ===== HELP MODAL BUILDER ===== */
+function buildHelpSections(){
+  const example1 = `===NOAH-ARK-ITEM-v1===
+{
+  "title": "جدول سفارشات - AG Grid",
+  "category": "جدول داده",
+  "description": "جدول سفارشات با AG Grid، تک‌خطی، فیلتر، سرچ",
+  "style": "تیره، هدر مجزا",
+  "usage": "در صفحه سفارشات درج کنید.",
+  "params": {},
+  "dependencies": ["AG Grid 31", "Vazirmatn", "Phosphor Icons", "Persian Datepicker"],
+  "html": "<div id='myGrid' class='ag-theme-quartz-dark'></div>",
+  "css": "#myGrid{height:500px;--ag-background-color:#0b0f19;--ag-header-background-color:#151a26;--ag-foreground-color:#e2e8f0;--ag-border-color:#2a3a4a;--ag-row-hover-color:rgba(212,175,55,0.08)}",
+  "js": "const api = agGrid.createGrid(document.getElementById('myGrid'), {\n  columnDefs: [\n    {field:'name', headerName:'نام مشتری'},\n    {field:'orderNo', headerName:'شماره سفارش'},\n    {field:'amount', headerName:'مبلغ', valueFormatter: p => p.value.toLocaleString('fa-IR')}\n  ],\n  rowData: [\n    {name:'علی رضایی', orderNo:'ORD-1001', amount:1500000},\n    {name:'مریم احمدی', orderNo:'ORD-1002', amount:2300000}\n  ],\n  pagination: true,\n  paginationPageSize: 10\n});"
+}
+===END-NOAH-ARK-ITEM===`;
+
+  const example2 = `===NOAH-ARK-ITEM-v1===
+{
+  "title": "انتخاب تاریخ شمسی",
+  "category": "فرم",
+  "description": "ورودی تاریخ شمسی با datepicker",
+  "style": "روشن، تمیز",
+  "usage": "در فرم‌ها استفاده کنید.",
+  "params": {},
+  "dependencies": ["Persian Datepicker", "Persian Date", "Vazirmatn"],
+  "html": "<div style='padding:16px'><input type='text' id='dp' placeholder='انتخاب تاریخ' style='padding:10px;border-radius:8px;border:1px solid #ccc'><p id='result' style='margin-top:12px;color:#333'></p></div>",
+  "css": "body{font-family:'Vazirmatn',sans-serif;background:#f5f7fb}",
+  "js": "new persianDatepicker('#dp', { format:'YYYY/MM/DD', onSelect: (unix) => { document.getElementById('result').textContent = 'انتخاب شد: ' + unix.format('YYYY/MM/DD'); } });"
+}
+===END-NOAH-ARK-ITEM===`;
+
+  const example3 = `===NOAH-ARK-ITEM-v1===
+{
+  "title": "کارت محصول",
+  "category": "کارت",
+  "description": "کارت محصول با hover",
+  "style": "گرادیانت فیروزه‌ای",
+  "usage": "در گالری محصولات",
+  "params": {"title":"نام محصول","price":"قیمت"},
+  "dependencies": ["Vazirmatn"],
+  "html": "<div class='card'><div class='card-title'>انگشتر فیروزه</div><div class='card-price'>۱٬۲۵۰٬۰۰۰ تومان</div></div>",
+  "css": ".card{background:linear-gradient(135deg,#22d3ee,#a855f7);color:#fff;padding:20px;border-radius:16px;font-family:'Vazirmatn',sans-serif;transition:transform .3s}.card:hover{transform:scale(1.03)}.card-title{font-weight:800;font-size:16px}.card-price{margin-top:8px;font-size:13px;opacity:.9}",
+  "js": ""
+}
+===END-NOAH-ARK-ITEM===`;
+
+  return `
+    <div class="help-section">
+      <h4><i class="ph ph-info"></i>۱. قالب اجباری</h4>
+      <p>هر آیتم باید دقیقاً بین دو مارکر زیر قرار گیرد. بدنه یک JSON معتبر است.</p>
+      <div class="help-code">
+        <button class="help-code-copy" data-code="===NOAH-ARK-ITEM-v1===\n{\n  ...\n}\n===END-NOAH-ARK-ITEM==="><i class="ph ph-copy"></i>کپی</button>
+        <pre>===NOAH-ARK-ITEM-v1===
+{
+  ... JSON VALID ...
+}
+===END-NOAH-ARK-ITEM===</pre>
       </div>
-    `;
-    document.body.appendChild(modal);
-  } else {
-    modal.style.display = 'flex';
-    modal.querySelector('#modalTitle').innerText = title;
+    </div>
+    <div class="help-section">
+      <h4><i class="ph ph-list-checks"></i>۲. فیلدهای JSON</h4>
+      <p>همه این فیلدها اجباری هستند. فیلد خالی باید <code>""</code> باشد نه <code>null</code>.</p>
+      <div class="help-code">
+        <button class="help-code-copy" data-code='{"title":"نام","category":"نوع","subject":"موضوع","description":"توضیح","style":"استایل","usage":"کاربرد","params":{},"dependencies":[],"html":"","css":"","js":""}'><i class="ph ph-copy"></i>کپی</button>
+        <pre>{
+  "title": "string — نام یکتا",
+  "category": "string — نوع (خودکار ثبت می‌شود)",
+  "subject": "string — موضوع (اختیاری)",
+  "description": "string — یک خط",
+  "style": "string — پالت/فونت",
+  "usage": "string — نحوه استفاده",
+  "params": { "name": {"type":"string","default":"x"} },
+  "dependencies": ["lib1", "lib2"],
+  "html": "&lt;div&gt;...&lt;/div&gt;",
+  "css": ".class{...}",
+  "js": "(() =&gt; { ... })();"
+}</pre>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4><i class="ph ph-warning-circle"></i>۳. قوانین طلایی</h4>
+      <p>۱) بدنه باید JSON معتبر باشد (گیومه دوتایی، بدون کاما انتهایی).<br>
+      ۲) فیلد <code>category</code> حتماً پر شود — خودکار در سیستم ثبت می‌شود.<br>
+      ۳) تمام کتابخانه‌ها باید در <code>dependencies</code> باشند.<br>
+      ۴) در <code>js</code> تگ <code>&lt;/script&gt;</code> را به صورت <code>&lt;\\/script&gt;</code> بنویسید.<br>
+      ۵) کد در iframe سندباکس با <code>dir="rtl"</code> اجرا می‌شود — به گلوبال‌های برنامه دست نزنید.</p>
+    </div>
+    <div class="help-section">
+      <h4><i class="ph ph-package"></i>۴. نام‌های شناخته‌شده کتابخانه</h4>
+      <p>این نام‌ها به صورت خودکار از CDN یا کش بارگذاری می‌شوند:</p>
+      <div class="help-code">
+        <button class="help-code-copy" data-code="AG Grid 31 / ag-grid-community\nPersian Datepicker\nPersian Date\nChart.js\nGSAP\nBootstrap\njQuery\nSwiper\nVazirmatn\nPhosphor Icons\nAlpine.js\nThree.js"><i class="ph ph-copy"></i>کپی</button>
+        <pre>AG Grid 31 / ag-grid-community  → ag-grid-community@31
+Persian Datepicker               → persian-datepicker@1.2
+Persian Date                     → persian-date@1.2
+Chart.js                         → chart.js@4
+GSAP                             → gsap@3
+Bootstrap                        → bootstrap@5
+jQuery                           → jquery@3.7
+Swiper                           → swiper@11
+Vazirmatn                        → فونت فارسی
+Phosphor Icons                   → آیکون‌ها
+Alpine.js / Three.js             → از npm</pre>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4><i class="ph ph-table"></i>۵. نمونه: AG Grid 31 + Persian Datepicker</h4>
+      <p>این نمونه کامل اجرا می‌شود — کتابخانه‌ها به‌صورت خودکار بارگذاری خواهند شد.</p>
+      <div class="help-code">
+        <button class="help-code-copy" data-code="${escapeHtml(example1)}"><i class="ph ph-copy"></i>کپی</button>
+        <pre>${escapeHtml(example1)}</pre>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4><i class="ph ph-calendar-blank"></i>۶. نمونه: Persian Datepicker</h4>
+      <div class="help-code">
+        <button class="help-code-copy" data-code="${escapeHtml(example2)}"><i class="ph ph-copy"></i>کپی</button>
+        <pre>${escapeHtml(example2)}</pre>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4><i class="ph ph-cube"></i>۷. نمونه: کارت ساده</h4>
+      <div class="help-code">
+        <button class="help-code-copy" data-code="${escapeHtml(example3)}"><i class="ph ph-copy"></i>کپی</button>
+        <pre>${escapeHtml(example3)}</pre>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4><i class="ph ph-check-circle"></i>۸. چک‌لیست نهایی</h4>
+      <p>
+      ☐ بین دو مارکر قرار گرفته<br>
+      ☐ JSON معتبر است<br>
+      ☐ فیلد category پر است (برای ثبت خودکار نوع)<br>
+      ☐ همه کتابخانه‌ها در dependencies هستند<br>
+      ☐ تگ &lt;/script&gt; در js escape شده<br>
+      ☐ به گلوبال‌های برنامه دست نمی‌زند
+      </p>
+    </div>`;
+}
+
+function openHelpModal(){
+  const body = document.getElementById('helpBody');
+  if(!body) return;
+  body.innerHTML = buildHelpSections();
+  body.querySelectorAll('.help-code-copy').forEach(btn => {
+    btn.onclick = () => {
+      const code = btn.getAttribute('data-code');
+      copyText(code);
+      btn.classList.add('copied');
+      btn.innerHTML = '<i class="ph ph-check"></i>کپی شد';
+      setTimeout(()=>{ btn.classList.remove('copied'); btn.innerHTML = '<i class="ph ph-copy"></i>کپی'; }, 1500);
+    };
+  });
+  document.getElementById('helpModal').classList.add('show');
+}
+
+/* ===== WIRE EVENTS ===== */
+function wireEvents(){
+  const safeOn = (id, ev, fn) => { const el = document.getElementById(id); if(el) el[ev] = fn; };
+  
+  $$('.tab').forEach(t => t.onclick = () => switchTab(t.dataset.tab));
+  $$('.mobile-nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+  
+  $$('.subtab').forEach(t => t.onclick = () => {
+    $$('.subtab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $$('.subpage').forEach(p => p.classList.remove('active'));
+    const s = document.getElementById('sub-'+t.dataset.sub);
+    if(s) s.classList.add('active');
+    try{
+      if(t.dataset.sub === 'info') { renderAbout(); updateAboutHeroStatic(); }
+      if(t.dataset.sub === 'reports') renderReports();
+      if(t.dataset.sub === 'backups') renderBackups();
+      if(t.dataset.sub === 'logs') renderLogs();
+    }catch(e){ console.warn(e); }
+  });
+
+  safeOn('themeBtn', 'onclick', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+  
+  safeOn('syncBtn', 'onclick', async () => {
+    const modal = document.getElementById('syncModal');
+    const title = document.getElementById('syncTitle');
+    const body = document.getElementById('syncBody');
+    if(!modal || !title || !body) return;
+    title.textContent = 'ذخیره آنلاین';
+    body.innerHTML = '<div class="empty"><i class="ph ph-spinner"></i>در حال فشرده‌سازی و ارسال...</div>';
+    modal.classList.add('show');
+    try{
+      const r = await onlineSaveNow();
+      const shareUrl = location.origin + location.pathname + `#sync=${r.service}:${r.id}`;
+      try{ await navigator.clipboard.writeText(shareUrl); }catch(e){}
+      log('ذخیره آنلاین', `${r.service}:${r.id}`,'other');
+      title.textContent = '✓ ذخیره شد';
+      body.innerHTML = `
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px">سرویس: <b>${escapeHtml(r.service)}</b> · حجم: ${faNum((r.compressedSize/1024).toFixed(1))}KB (فشرده از ${faNum((r.originalSize/1024).toFixed(1))}KB)</p>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px">لینک کپی شد:</p>
+        <div style="padding:10px;background:var(--surface);border-radius:10px;font-family:monospace;font-size:10.5px;word-break:break-all;direction:ltr;text-align:left">${escapeHtml(shareUrl)}</div>
+        <div class="flex-row mt-8"><button class="icon-action primary" onclick="copyText('${escapeHtml(shareUrl)}')"><i class="ph ph-copy"></i><span class="lbl">کپی دوباره</span></button></div>`;
+      toast('✓ ذخیره و کپی شد','ok');
+    }catch(e){
+      body.innerHTML = `<div style="padding:12px;background:rgba(248,113,113,0.1);border-radius:8px;font-size:12px;color:var(--err)"><b>خطا:</b> ${escapeHtml(e.message)}</div>`;
+    }
+  });
+
+  let previewTimer = null;
+  const codeInput = document.getElementById('codeInput');
+  if(codeInput) {
+    codeInput.addEventListener('input', () => { clearTimeout(previewTimer); previewTimer = setTimeout(updateEntryPreview, 500); });
+    codeInput.addEventListener('paste', () => setTimeout(updateEntryPreview, 300));
   }
-  modal.querySelector('#modalBody').innerHTML = content;
+
+  setInterval(()=>{ const el = document.getElementById('nowDisplay'); if(el) el.textContent = jDate(new Date().toISOString()); }, 60000);
+  const nd = document.getElementById('nowDisplay'); if(nd) nd.textContent = jDate(new Date().toISOString());
+
+  safeOn('tSave', 'onclick', doSave);
+  safeOn('saveBtn', 'onclick', doSave);
+  safeOn('tCopy', 'onclick', () => { const v = codeInput?.value; if(!v){ toast('خالی','err'); return; } copyText(v); });
+  safeOn('tPaste', 'onclick', async () => {
+    const t = await pasteFromClipboard();
+    if(t === null){ toast('دسترسی کلیپ‌بورد نیست','err'); return; }
+    if(codeInput) { codeInput.value = t; updateEntryPreview(); }
+    toast('✓ پیست شد','ok');
+  });
+  safeOn('tEye', 'onclick', async () => {
+    const code = codeInput?.value.trim();
+    if(!code){ toast('کدی نیست','err'); return; }
+    const p = parseItemCode(code);
+    if(!p.ok){ toast('کد نامعتبر','err'); return; }
+    const frame = document.getElementById('previewFrame');
+    if(frame) {
+      frame.srcdoc = await buildPreviewSrcdoc(p.data, p.raw, code);
+      document.getElementById('previewModal').classList.add('show');
+    }
+  });
+  safeOn('tClear', 'onclick', () => { if(codeInput) codeInput.value = ''; const ep = document.getElementById('entryPreview'); if(ep) ep.innerHTML = ''; toast('پاک شد',''); });
+  safeOn('parseBtn', 'onclick', () => {
+    const code = codeInput?.value.trim();
+    if(!code){ toast('کدی نیست','err'); return; }
+    const p = parseItemCode(code);
+    updateEntryPreview();
+    if(p.ok && !p.raw) toast('✓ معتبر است','ok');
+    else if(p.ok && p.raw) toast('کد خام','');
+    else toast('خطا','err');
+  });
+
+  // Add modal
+  let addMode = 'item';
+  const openAdd = (mode) => {
+    addMode = mode;
+    const labels = {item:'افزودن آیتم', cat:'افزودن نوع'};
+    const title = document.getElementById('addModalTitle');
+    if(title) title.textContent = labels[mode] || 'افزودن';
+    const inp = document.getElementById('addModalInput');
+    if(inp) inp.value = '';
+    const modal = document.getElementById('addModal');
+    if(modal) modal.classList.add('show');
+    setTimeout(()=>{ if(inp) inp.focus(); }, 100);
+  };
+  safeOn('addItemBtn', 'onclick', () => openAdd('item'));
+  safeOn('addCatBtn', 'onclick', () => openAdd('cat'));
+  
+  safeOn('addModalClose', 'onclick', () => { const m = document.getElementById('addModal'); if(m) m.classList.remove('show'); });
+  safeOn('addModalCancel', 'onclick', () => { const m = document.getElementById('addModal'); if(m) m.classList.remove('show'); });
+  
+  const addModalEl = document.getElementById('addModal');
+  if(addModalEl) addModalEl.addEventListener('click', e => { if(e.target.id==='addModal') addModalEl.classList.remove('show'); });
+  
+  const addInput = document.getElementById('addModalInput');
+  if(addInput) addInput.addEventListener('keydown', e => { if(e.key==='Enter') { const ok = document.getElementById('addModalOk'); if(ok) ok.click(); } });
+  
+  safeOn('addModalOk', 'onclick', () => {
+    const name = addInput?.value.trim();
+    if(!name){ toast('نام را وارد کنید','err'); return; }
+    if(addMode === 'item'){
+      if(db.items[name]){ toast('از قبل هست','err'); return; }
+      db.items[name] = {name, subject:'عمومی', category:catDD.getValue()||'کامپوننت', createdAt:new Date().toISOString(), versions:[]};
+      log('ایجاد آیتم', name,'create');
+      saveDB(); refreshItemDD(); itemDD.setValue(name);
+      toast(`✓ ${name} اضافه شد`,'ok');
+    } else {
+      if(db.categories.includes(name)){ toast('از قبل هست','err'); return; }
+      db.categories.push(name); log('ایجاد نوع', name,'create'); saveDB(); refreshCatDD(); catDD.setValue(name);
+      toast(`✓ نوع ${name} اضافه شد`,'ok');
+    }
+    if(addModalEl) addModalEl.classList.remove('show');
+  });
+
+  // Bulk
+  safeOn('bulkImportBtn', 'onclick', openBulkModal);
+  safeOn('bulkClose', 'onclick', () => { const m = document.getElementById('bulkModal'); if(m) m.classList.remove('show'); });
+  safeOn('bulkCancel', 'onclick', () => { const m = document.getElementById('bulkModal'); if(m) m.classList.remove('show'); });
+  
+  const bulkModalEl = document.getElementById('bulkModal');
+  if(bulkModalEl) bulkModalEl.addEventListener('click', e => { if(e.target.id==='bulkModal') bulkModalEl.classList.remove('show'); });
+  
+  safeOn('bulkOk', 'onclick', processBulk);
+
+  // Health Check
+  safeOn('runHealthCheckBtn', 'onclick', runHealthCheck);
+
+  // Help
+  safeOn('helpBtn', 'onclick', openHelpModal);
+  safeOn('helpClose', 'onclick', () => { const m = document.getElementById('helpModal'); if(m) m.classList.remove('show'); });
+  safeOn('helpClose2', 'onclick', () => { const m = document.getElementById('helpModal'); if(m) m.classList.remove('show'); });
+  safeOn('helpCopy', 'onclick', () => copyText(GUIDE_TEXT));
+  safeOn('copyGuideBtn', 'onclick', () => copyText(GUIDE_TEXT));
+
+  // Confirm & Preview
+  safeOn('confirmOk', 'onclick', () => closeConfirm(true));
+  safeOn('confirmCancel', 'onclick', () => closeConfirm(false));
+  safeOn('confirmClose', 'onclick', () => closeConfirm(false));
+  
+  const confirmModalEl = document.getElementById('confirmModal');
+  if(confirmModalEl) confirmModalEl.addEventListener('click', e => { if(e.target.id==='confirmModal') closeConfirm(false); });
+
+  safeOn('previewClose', 'onclick', () => { const m = document.getElementById('previewModal'); if(m) m.classList.remove('show'); });
+  const previewModalEl = document.getElementById('previewModal');
+  if(previewModalEl) previewModalEl.addEventListener('click', e => { if(e.target.id==='previewModal') previewModalEl.classList.remove('show'); });
+
+  safeOn('verPrev', 'onclick', () => { if(!currentItem) return; const total=(db.items[currentItem].versions||[]).length; if(currentVerIdx < total-1){ currentVerIdx++; renderView(); } });
+  safeOn('verNext', 'onclick', () => { if(!currentItem) return; if(currentVerIdx > 0){ currentVerIdx--; renderView(); } });
+
+  // Backups
+  safeOn('createBackupBtn', 'onclick', () => {
+    try {
+      const backup = {id:Date.now().toString(), ts:new Date().toISOString(), data: JSON.parse(JSON.stringify({items:db.items, categories:db.categories, subjects:db.subjects}))};
+      if(!db.backups) db.backups = [];
+      db.backups.push(backup);
+      if(db.backups.length > 10) db.backups = db.backups.slice(-10);
+      saveDB(); 
+      log('ایجاد بک‌آپ','','backup'); 
+      renderBackups(); 
+      toast('✓ بک‌آپ ایجاد شد','ok');
+    } catch(err) { toast('خطا در ایجاد بک‌آپ: ' + err.message, 'err'); }
+  });
+  safeOn('logsBtn', 'onclick', () => {
+    const txt = db.logs.map(l => `[${jDateFull(l.ts)}] [${l.type||'other'}] ${l.action} :: ${l.detail}`).join('\n');
+    downloadFile(`noah-ark-logs-${new Date().toISOString().slice(0,10)}.txt`, txt, 'text/plain');
+    toast('✓ دانلود شد','ok');
+  });
+  safeOn('resetBtn', 'onclick', async () => {
+    const ok = await confirmDialog('ریست','تمام داده‌ها حذف می‌شوند. یک نسخه پشتیبان خودکار گرفته می‌شود. ادامه؟');
+    if(!ok) return;
+    try{ const cur = localStorage.getItem(STORAGE_KEY); if(cur) localStorage.setItem(STORAGE_KEY+'_safety_'+Date.now(), cur); }catch(e){}
+    localStorage.removeItem(STORAGE_KEY); location.reload();
+  });
+
+  safeOn('logSearch', 'input', renderLogs);
+  safeOn('logFilter', 'change', renderLogs);
+  safeOn('setDark', 'onclick', () => applyTheme('dark'));
+  safeOn('setLight', 'onclick', () => applyTheme('light'));
+
+  // Icon picker
+  safeOn('pickLibBtn', 'onclick', () => { if(!iconItemDD.getValue()){ toast('آیتم را انتخاب','err'); return; } renderIconGrid(''); const m = document.getElementById('iconPickerModal'); if(m) m.classList.add('show'); });
+  safeOn('iconSearch', 'input', e => renderIconGrid(e.target.value));
+  safeOn('iconPickerClose', 'onclick', () => { const m = document.getElementById('iconPickerModal'); if(m) m.classList.remove('show'); });
+  safeOn('iconPickerCancel', 'onclick', () => { const m = document.getElementById('iconPickerModal'); if(m) m.classList.remove('show'); });
+  
+  const iconPickerModalEl = document.getElementById('iconPickerModal');
+  if(iconPickerModalEl) iconPickerModalEl.addEventListener('click', e => { if(e.target.id==='iconPickerModal') iconPickerModalEl.classList.remove('show'); });
+  
+  safeOn('uploadIconBtn', 'onclick', () => { if(!iconItemDD.getValue()){ toast('آیتم را انتخاب','err'); return; } const f = document.getElementById('iconFile'); if(f) f.click(); });
+  
+  safeOn('iconFile', 'change', e => {
+    const file = e.target.files[0]; if(!file) return;
+    if(!file.type.startsWith('image/')){ toast('فایل تصویری','err'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => { const item = db.items[iconItemDD.getValue()]; if(item){ item.icon = ev.target.result; saveDB(); log('آپلود آیکون', item.name,'other'); toast('✓ آپلود','ok'); renderCarousel(); } };
+    reader.readAsDataURL(file); e.target.value = '';
+  });
+
+  // Lib folder
+  safeOn('pickLibFolderBtn', 'onclick', async () => {
+    if(!window.showDirectoryPicker){ toast('مرورگر پشتیبانی نمی‌کند — Chrome/Edge','err'); return; }
+    try{
+      const handle = await window.showDirectoryPicker({mode:'readwrite'});
+      libDirHandle = handle;
+      await saveDirHandle(handle);
+      updateLibFolderStatus();
+      toast('✓ پوشه انتخاب شد — اسکن در حال انجام...','ok');
+      const r = await scanFolderAndCache();
+      updateLibCacheStatus();
+      toast(`✓ ${r.cached} فایل کش شد`,'ok');
+      log('اتصال پوشه', handle.name, 'other');
+      setTimeout(()=>checkDepStatuses(), 500);
+    }catch(e){ if(e.name !== 'AbortError') toast('خطا: '+e.message,'err'); }
+  });
+
+  safeOn('saveToHostBtn', 'onclick', async () => {
+    if(!libDirHandle){ toast('ابتدا پوشه را انتخاب کنید','err'); return; }
+    const libs = await listCachedLibs();
+    if(!libs.length){ toast('هیچ کتابخانه‌ای در کش نیست','err'); return; }
+    let count = 0;
+    for(const l of libs){
+      try {
+        const ext = l.type === 'css' ? '.css' : '.js';
+        const fname = l.name.replace(/[^a-z0-9.-]/gi, '-') + ext;
+        const fh = await libDirHandle.getFileHandle(fname, {create:true});
+        const w = await fh.createWritable();
+        await w.write(l.data);
+        await w.close();
+        count++;
+      } catch(e) { console.warn(e); }
+    }
+    toast(`✓ ${count} کتابخانه در پوشه هاست ذخیره شد`,'ok');
+    log('ذخیره در هاست', `${count} فایل`, 'other');
+  });
+
+  // Import/Export
+  safeOn('exportAllBtn', 'onclick', () => {
+    downloadFile(`noah-ark-full-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify({meta:db.meta, items:db.items, categories:db.categories, subjects:db.subjects, logs:db.logs, backups:db.backups},null,2));
+    toast('✓ خروجی دانلود شد','ok');
+  });
+  safeOn('importAllBtn', 'onclick', () => { const f = document.getElementById('importFile'); if(f) f.click(); });
+  
+  safeOn('importFile', 'change', async e => {
+    const file = e.target.files[0]; if(!file) return;
+    try{
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if(!data.items) throw new Error('ساختار نامعتبر');
+      const ok = await confirmDialog('ورود','داده‌های فعلی جایگزین می‌شوند. ادامه؟');
+      if(!ok) return;
+      db.items = data.items || {};
+      db.categories = data.categories || db.categories;
+      db.subjects = data.subjects || db.subjects;
+      if(data.meta) db.meta = {...db.meta, ...data.meta};
+      if(data.backups) db.backups = data.backups;
+      saveDB(); log('ورود داده','از فایل JSON','restore');
+      refreshItemDD(); refreshCatDD(); renderAbout();
+      toast('✓ وارد شد','ok');
+    }catch(err){ toast('خطا: '+err.message,'err'); }
+    e.target.value = '';
+  });
+
+  // Online load
+  safeOn('onlineLoadBtn', 'onclick', () => {
+    const title = document.getElementById('syncTitle');
+    const body = document.getElementById('syncBody');
+    if(!title || !body) return;
+    title.textContent = 'بارگذاری آنلاین';
+    body.innerHTML = `<p style="font-size:12px;color:var(--text2);margin-bottom:10px">لینک کامل یا شناسه را وارد کنید:</p>
+      <input type="text" id="loadUrlInput" placeholder="https://paste.rs/... یا https://jsonblob.com/..." style="direction:ltr;text-align:left">
+      <div class="flex-row mt-8"><button class="icon-action primary" onclick="doOnlineLoad()"><i class="ph ph-cloud-arrow-down"></i><span class="lbl">بارگذاری</span></button></div>`;
+    const m = document.getElementById('syncModal'); if(m) m.classList.add('show');
+  });
+  
+  window.doOnlineLoad = async () => {
+    const val = document.getElementById('loadUrlInput').value.trim();
+    if(!val){ toast('لینک را وارد کنید','err'); return; }
+    let service = null, id = null;
+    if(val.includes('paste.rs/')){ service='paste.rs'; id = val.split('paste.rs/').pop().split(/[?#]/)[0]; }
+    else if(val.includes('jsonblob.com/')){ service='jsonblob'; id = val.split('jsonBlob/').pop().split(/[?#]/)[0]; if(!id || id.includes('api')) { const m = val.match(/jsonBlob\/([a-f0-9-]+)/i); if(m) id = m[1]; } }
+    else if(val.includes('#sync=')){ const p = val.split('#sync=')[1].split('&')[0]; const parts = p.split(':'); service = parts[0]; id = parts[1]; }
+    else { toast('لینک نامعتبر','err'); return; }
+    try{
+      const body = document.getElementById('syncBody');
+      if(body) body.innerHTML = '<div class="empty"><i class="ph ph-spinner"></i>در حال دریافت...</div>';
+      const data = await onlineLoadById(service, id);
+      if(!data.items) throw new Error('ساختار نامعتبر');
+      const ok = await confirmDialog('بارگذاری','داده‌های فعلی جایگزین می‌شوند. ادامه؟');
+      if(!ok) return;
+      db.items = data.items; db.categories = data.categories || db.categories; db.subjects = data.subjects || db.subjects;
+      saveDB(); log('بارگذاری آنلاین', service+':'+id, 'restore');
+      refreshItemDD(); refreshCatDD(); renderAbout();
+      const m = document.getElementById('syncModal'); if(m) m.classList.remove('show');
+      toast('✓ بارگذاری شد','ok');
+    }catch(err){ 
+      const body = document.getElementById('syncBody');
+      if(body) body.innerHTML = `<div style="padding:12px;color:var(--err);font-size:12px">${escapeHtml(err.message)}</div>`; 
+    }
+  };
+
+  safeOn('shareUrlBtn', 'onclick', () => {
+    try{
+      const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({items: db.items, categories: db.categories, subjects: db.subjects}));
+      const url = location.origin + location.pathname + '#data=' + compressed;
+      if(url.length > 32000){ toast('داده بزرگ‌تر از URL — از خروجی استفاده کنید','err'); return; }
+      const title = document.getElementById('syncTitle');
+      const body = document.getElementById('syncBody');
+      if(!title || !body) return;
+      title.textContent = 'لینک اشتراک';
+      body.innerHTML = `<p style="font-size:12px;color:var(--text2);margin-bottom:10px">این لینک را کپی و در دستگاه دیگر باز کنید:</p>
+        <div style="padding:10px;background:var(--surface);border-radius:10px;font-family:monospace;font-size:10.5px;word-break:break-all;direction:ltr;text-align:left;max-height:180px;overflow:auto">${escapeHtml(url)}</div>
+        <div class="flex-row mt-8"><button class="icon-action primary" onclick="copyText(decodeURIComponent('${encodeURIComponent(url)}'))"><i class="ph ph-copy"></i><span class="lbl">کپی</span></button></div>`;
+      const m = document.getElementById('syncModal'); if(m) m.classList.add('show');
+    }catch(e){ toast('خطا: '+e.message,'err'); }
+  });
+
+  safeOn('syncClose', 'onclick', () => { const m = document.getElementById('syncModal'); if(m) m.classList.remove('show'); });
+  safeOn('syncCancel', 'onclick', () => { const m = document.getElementById('syncModal'); if(m) m.classList.remove('show'); });
+  
+  const syncModalEl = document.getElementById('syncModal');
+  if(syncModalEl) syncModalEl.addEventListener('click', e => { if(e.target.id==='syncModal') syncModalEl.classList.remove('show'); });
+
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape'){ 
+      ['#helpModal','#addModal','#previewModal','#iconPickerModal','#syncModal','#bulkModal'].forEach(s => { 
+        const el = document.querySelector(s); if(el) el.classList.remove('show'); 
+      }); 
+      closeConfirm(false); 
+      document.querySelectorAll('.dd.open').forEach(el => { if(el._ddInstance) el._ddInstance.close(); });
+    }
+    if((e.ctrlKey || e.metaKey) && e.key === 's'){ e.preventDefault(); doSave(); }
+  });
+
+  window.addEventListener('resize', updateNavSlider);
 }
 
-window.closeModal = () => {
-  document.getElementById('orderActionModal').style.display = 'none';
-};
-
-// اتصال رویدادهای فیلتر
-document.addEventListener('DOMContentLoaded', () => {
-  const statusFilter = document.getElementById('orderStatusFilter');
-  const dateFrom = document.getElementById('orderDateFrom');
-  const dateTo = document.getElementById('orderDateTo');
-  const searchInput = document.getElementById('orderSearchInput');
-  if (statusFilter) statusFilter.addEventListener('change', applyOrderFilters);
-  if (dateFrom) dateFrom.addEventListener('change', applyOrderFilters);
-  if (dateTo) dateTo.addEventListener('change', applyOrderFilters);
-  if (searchInput) searchInput.addEventListener('input', applyOrderFilters);
-});
-
-// مرتب‌سازی جدول سفارشات (برای کلیک روی هدرها)
-window.sortOrdersBy = (col) => {
-  if (orderSortColumn === col) orderSortDirection = orderSortDirection === 'asc' ? 'desc' : 'asc';
-  else { orderSortColumn = col; orderSortDirection = 'asc'; }
-  sortOrders();
-  displayOrders();
-};
-  })();
-
-
-function issueCertificate(id){
-
-window.open("product_certificate.php?id="+id,"_blank");
-
+function updateLibFolderStatus(){
+  const el = document.getElementById('libFolderStatus');
+  if(!el) return;
+  if(libDirHandle){ el.innerHTML = `<span style="color:var(--ok)">✓ پوشه: </span><b>${escapeHtml(libDirHandle.name||'—')}</b>`; }
+  else { el.innerHTML = `<span style="color:var(--text3)">پوشه انتخاب نشده</span>`; }
+}
+async function updateLibCacheStatus(){
+  const el = document.getElementById('libCacheStatus');
+  if(!el) return;
+  const list = await listCachedLibs();
+  if(list.length){ el.innerHTML = `<span style="color:var(--ok)">📦 ${faNum(list.length)} کتابخانه در حافظه</span>`; }
+  else { el.innerHTML = ''; }
 }
 
+window.restoreBackup = async (id) => {
+  const b = db.backups.find(x => x.id === id); if(!b) return;
+  const ok = await confirmDialog('بازگردانی','داده‌های فعلی جایگزین می‌شوند. ادامه؟'); if(!ok) return;
+  db.items = JSON.parse(JSON.stringify(b.data.items||{}));
+  db.categories = JSON.parse(JSON.stringify(b.data.categories||[]));
+  db.subjects = JSON.parse(JSON.stringify(b.data.subjects||db.subjects));
+  saveDB(); log('بازگردانی','از بک‌آپ','restore');
+  refreshItemDD(); refreshCatDD(); renderAbout(); toast('✓ بازگردانی شد','ok');
+};
+window.downloadBackup = (id) => {
+  const b = db.backups.find(x => x.id === id); if(!b) return;
+  downloadFile(`noah-ark-backup-${b.ts.slice(0,10)}.json`, JSON.stringify(b.data,null,2));
+  toast('✓ دانلود شد','ok');
+};
+window.deleteBackup = async (id) => {
+  const ok = await confirmDialog('حذف بک‌آپ','مطمئنید؟'); if(!ok) return;
+  db.backups = db.backups.filter(x => x.id !== id);
+  saveDB(); log('حذف بک‌آپ','','delete'); renderBackups(); toast('✓ حذف شد','ok');
+};
+
+/* ===== INIT ===== */
+(async () => {
+  try{ renderPresetGrid(); }catch(e){}
+  try{ renderColorGrid(); }catch(e){}
+  try{ wireEvents(); }catch(e){ console.error(e); }
+  try{ refreshItemDD(); }catch(e){}
+  try{ refreshCatDD(); }catch(e){}
+  try{ generateHeroStars(); }catch(e){}
+  try{ renderAbout(); }catch(e){}
+  try{ updateAboutHeroStatic(); }catch(e){}
+  libDirHandle = await loadDirHandle();
+  updateLibFolderStatus();
+  await updateLibCacheStatus();
+  setTimeout(updateNavSlider, 300);
+})();
+
+/* reset=1 */
+try{
+  if(new URLSearchParams(location.search).get('reset') === '1'){
+    if(confirm('همه داده‌ها حذف شوند؟')){
+      try{ const cur = localStorage.getItem(STORAGE_KEY); if(cur) localStorage.setItem(STORAGE_KEY+'_safety_'+Date.now(), cur); }catch(e){}
+      localStorage.removeItem(STORAGE_KEY); location.href = location.pathname;
+    }
+  }
+}catch(e){}
+
+/* URL hash */
+try{
+  const hash = location.hash;
+  if(hash.startsWith('#data=')){
+    const compressed = hash.slice(6);
+    const json = LZString.decompressFromEncodedURIComponent(compressed);
+    if(json){ const data = JSON.parse(json); if(data.items && confirm('داده‌ای در لینک هست. بارگذاری شود؟')){ db.items = data.items; db.categories = data.categories || db.categories; db.subjects = data.subjects || db.subjects; saveDB(); log('بارگذاری از لینک','','restore'); location.reload(); } }
+    history.replaceState(null,'',' ');
+  } else if(hash.startsWith('#sync=')){
+    const p = hash.slice(6).split('&')[0];
+    const parts = p.split(':');
+    const service = parts[0], id = parts[1];
+    if(service && id && confirm('داده‌ای در سرور هست. بارگذاری شود؟')){
+      onlineLoadById(service, id).then(data => { if(data.items){ db.items = data.items; db.categories = data.categories || db.categories; db.subjects = data.subjects || db.subjects; saveDB(); log('بارگذاری از لینک', service+':'+id, 'restore'); location.reload(); } }).catch(()=>{});
+    }
+    history.replaceState(null,'',' ');
+  }
+}catch(e){}
+
+console.log('%c⛵ کشتی نوح v'+APP_VERSION+' — گروه هنری اقاقیا', 'font-size:16px;color:#22d3ee;font-weight:bold');
 </script>
-
-<footer style="text-align:center; margin-top:2rem; color:rgba(255,255,255,0.5); font-size:0.7rem;">
-  <a href="#" onclick="showInstallPrompt()" style="color:var(--accent-gold);">نصب اپلیکیشن</a> | 
-  <a href="#" onclick="showHelp()" style="color:var(--accent-gold);">راهنما</a>
-  <br>رادیکال ایندکس‌ساز · تمام حقوق محفوظ است
-</footer>
 </body>
 </html>
